@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// 바자회 POS 보안 규칙
+// - 로그인한 '바자회 공용 계정'만 데이터를 읽고 쓸 수 있습니다.
+// - 이 파일을 Firebase 콘솔 → Firestore Database → 규칙 에 붙여넣고 '게시' 하세요.
+//   (게시하지 않으면 로그인은 되는데 아무것도 저장되지 않습니다)
+// - 아래 이메일을 firebase-config.js 의 STORE_EMAIL 과 같게 바꾸세요.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isStore() {
+      return request.auth != null
+        && request.auth.token.email == 'fallbazaar@gmail.com';
+    }
+
+    match /products/{id}     { allow read, write: if isStore(); }   // 상품 · 재고
+    match /transactions/{id} { allow read, write: if isStore(); }   // 판매 · 반품
+    match /preorders/{id}    { allow read, write: if isStore(); }   // 예약 대장
+    match /sheetQueue/{id}   { allow read, write: if isStore(); }   // 시트로 아직 못 보낸 기록
+    match /meta/{id}         { allow read, write: if isStore(); }   // 개업/마감 · 시트 설정 · 잠금 · 번호
+
+    // 재고 원장 — 한 번 남긴 줄은 고쳐 쓰지 못한다 (무를 때는 새 줄을 남긴다).
+    // delete 는 '전체 초기화' 와 '백업 복원' 에 필요해서 열어 둔다.
+    match /stockLogs/{id} {
+      allow read, create, delete: if isStore();
+      allow update: if false;
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

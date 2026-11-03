@@ -1,0 +1,3322 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>바자회 POS</title>
+<meta name="description" content="바자회 판매 · 예약 · 재고 관리 포스">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#16386a">
+<link rel="icon" href="./icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="바자회 POS">
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    /* ═══════════ 계산대 장부 ═══════════
+       바탕은 종이, 크롬(머리·탭·액션바)은 잉크. 색은 장식이 아니라 뜻이다:
+       초록=현금·매출, 파랑=계좌이체·주요동작, 빨강=할인·환불·반품, 앰버=분할·재고경고.
+       바탕을 차가운 청회색에서 따뜻한 종이색으로 옮겨, 파랑이 '배경'이 아니라
+       '지금 누를 것'으로 읽히게 했다. */
+
+    /* 남색 — 크롬(머리·탭·바). 검정보다 종이 바탕과 사이가 좋고,
+       파랑 계열 안에서 명도만 달리해 위계를 만든다. */
+    --ink: #16233f;
+    --ink-2: #1e3054;
+    --ink-3: #33456b;
+    --on-ink: #eef2f9;
+    --on-ink-dim: #93a3c0;
+
+    /* 종이 — 바탕과 면 */
+    --bg: #f4f2ee;
+    --surface: #ffffff;
+    --surface-2: #faf8f5;
+    --gray: #eeebe5;
+    --line: #e0dcd4;
+    --line-soft: #eeebe4;
+    --text: #1a2233;
+    --muted: #6a7385;
+
+    /* 뜻이 있는 색 */
+    --blue: #1b50c4;
+    --blue-dark: #123a95;
+    --blue-light: #3a70e0;
+    --blue-wash: #e8effc;
+    --green: #10794b;
+    --green-dark: #0b5c39;
+    --green-wash: #e2f2e9;
+    --red: #c2352c;
+    --red-wash: #fbeae8;
+    /* 찬송가 분류 눈금 하나에만 쓴다 — 뜻 색(초록·파랑·빨강·앰버)과 겹치지 않는 자리 */
+    --violet: #6b4a9e;
+    --amber: #8f6008;
+    --amber-wash: #fbf0d8;
+    --amber-line: #e6cf9a;      /* 앰버 바탕 위에 얹히는 테두리 — 결제대기 줄·칩이 쓴다 */
+
+    --r-sm: 9px;
+    --r-md: 13px;
+    --r-lg: 18px;
+    --r-pill: 999px;
+
+    /* 그림자는 언제나 아래로 떨어진다 — 빛은 위에 있다 */
+    --sh-1: 0 1px 2px rgba(23,29,39,.06), 0 1px 1px rgba(23,29,39,.04);
+    --sh-2: 0 2px 4px rgba(23,29,39,.06), 0 6px 16px rgba(23,29,39,.08);
+    --sh-3: 0 24px 60px rgba(12,18,28,.32), 0 2px 8px rgba(12,18,28,.18);
+
+    --tap: 44px;
+    --pill-h: 38px;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --bar-h: 68px;              /* 항상 보이는 액션 바 */
+
+    /* 글자 크기 — 반 단계(11.5·12.5·13.5)를 쓰지 않는다. 단계가 굵직해야 위계가 선다.
+       자간과 행간은 크기마다 다르다. 하나로 고정하면 어느 크기에선가 반드시 틀린다:
+       글자가 커질수록 사이가 벌어져 보여 자간을 좁히고, 작아질수록 붙어 보여 넓힌다.
+       행간은 반대로 — 큰 글자는 좁게, 본문은 넉넉하게. */
+    --fs-2xs: 13px;   --tr-2xs: .012em;  --lh-2xs: 1.45;
+    --fs-xs: 14px;    --tr-xs: .006em;   --lh-xs: 1.5;
+    --fs-sm: 15px;    --tr-sm: 0;        --lh-sm: 1.55;
+    --fs-md: 16px;    --tr-md: -.002em;  --lh-md: 1.5;
+    --fs-lg: 18px;    --tr-lg: -.012em;  --lh-lg: 1.35;
+    --fs-xl: 21px;    --tr-xl: -.018em;  --lh-xl: 1.25;
+    --fs-2xl: 27px;   --tr-2xl: -.024em; --lh-2xl: 1.15;
+    --fs-3xl: 35px;   --tr-3xl: -.03em;  --lh-3xl: 1.05;
+
+    /* 누르는 느낌 — 버튼은 두께가 있는 물건이다.
+       평소엔 아래에 2px 짜리 '옆면'이 보이고, 누르면 그 두께만큼 내려앉는다. */
+    /* 누르는 순간은 지연이 0에 가까워야 '직접 만진다'는 느낌이 산다.
+       놓는 쪽은 길게 — 그래야 '튕겨 오른다'가 아니라 '놓았다'로 읽힌다. */
+    --press-in: 45ms linear;
+    --press-out: 220ms cubic-bezier(.2,.9,.3,1);
+    /* 서랍이 미끄러지는 곡선 — 감쇠 0.8 · 응답 0.3 (애플의 drawer 값) 에 가깝게 */
+    --slide: 320ms cubic-bezier(.22,1.02,.36,1);
+    /* 스스로 자리를 잡는 것 — 누름(--press-out)보다 길고, 끝에서 천천히 멎는다.
+       리포트 요약이 줄어들 때처럼 '사람이 시킨 게 아니라 화면이 알아서 물러나는' 움직임. */
+    --settle: 420ms cubic-bezier(.25,.75,.32,1);
+  }
+
+  html, body { height: 100%; }
+  b, strong { font-weight: 600; }
+  body {
+    /* 기본 시스템 글꼴(윈도우에서는 맑은 고딕)은 '아무것도 고르지 않은' 얼굴이다.
+       Pretendard 는 획이 고르고 얇은 굵기에서도 또렷해서, 글자를 한 단계 키우고 굵기를
+       한 단계 낮춰도(2026-11-03, 운영자 요청 '조금 더 크게, 얇게, 깔끔하게') 금액이 잘 읽힌다.
+       가변 글꼴이라 굵기마다 파일을 따로 받지 않는다. 못 받아오면 시스템 글꼴로 내려간다. */
+    font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
+                 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: var(--fs-sm);
+    line-height: var(--lh-sm);
+    letter-spacing: var(--tr-sm);
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  /* 크기 단계마다 자간·행간을 한 벌로 붙인다 — 크기만 바꾸고 나머지를 두면 위계가 안 선다 */
+  .stat .lbl, .cat-badge, .pill, .book-btn .bs, .cats button .n,
+  .chart-sub, .chart-x span, .stat .sub, .log-when, .ret-sub, .sp-hint,
+  thead th, tbody td::before, .customer label, .field label, .mobile-bar .mb-qty {
+    font-size: var(--fs-2xs); letter-spacing: var(--tr-2xs); line-height: var(--lh-2xs);
+  }
+  .filters .count, .cats button, .period button, .mini-btn, .modal p.desc,
+  .warn-box, .info-box, .log-row, .biz-card .biz-sub, .chkline, .header-note {
+    letter-spacing: var(--tr-xs); line-height: var(--lh-xs);
+  }
+  .btn, .search, .cart-row, .ret-title, .cart-empty { letter-spacing: var(--tr-sm); }
+  .sum-row, .book-btn .bt, .sp-row, .customer input { letter-spacing: var(--tr-md); line-height: var(--lh-md); }
+  .panel-head h2, .modal h3, .biz-card h2, .book-btn .bp, .sum-row.total,
+  .stat .val, .stat.hero .val, .mobile-bar .mb-amt, .login-brand, header .brand {
+    text-wrap: balance;
+  }
+  .panel-head h2 { letter-spacing: var(--tr-xl); line-height: var(--lh-xl); }
+  .modal h3, .book-btn .bp { letter-spacing: var(--tr-lg); line-height: var(--lh-lg); }
+  .stat .val { letter-spacing: var(--tr-2xl); line-height: var(--lh-2xl); }
+  .stat.hero .val, .mobile-bar .mb-amt { letter-spacing: var(--tr-3xl); line-height: var(--lh-3xl); }
+
+  /* 돈은 자리수가 맞아야 눈으로 훑을 수 있다 */
+  .val, .amt, .bp, .num, .mb-amt, .sp-v, .log-delta, .clock,
+  .sum-row, .stat .val, td.num, .biz-last .big {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  /* 우리가 그리지 않은 브라우저 표면도 이 디자인에 속한다 */
+  ::selection { background: #cfe0fb; color: var(--blue-dark); }
+  input, textarea, select { caret-color: var(--blue); }
+  :focus-visible {
+    outline: 2px solid var(--blue-light);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  .panel, .table-wrap, .cart-items, .ret-list, .log-list, .product-pane, .modal {
+    scrollbar-width: thin; scrollbar-color: #c8c2b6 transparent;
+  }
+  .panel::-webkit-scrollbar, .table-wrap::-webkit-scrollbar, .modal::-webkit-scrollbar,
+  .cart-items::-webkit-scrollbar, .ret-list::-webkit-scrollbar,
+  .log-list::-webkit-scrollbar, .product-pane::-webkit-scrollbar { width: 11px; height: 11px; }
+  .panel::-webkit-scrollbar-thumb, .table-wrap::-webkit-scrollbar-thumb, .modal::-webkit-scrollbar-thumb,
+  .cart-items::-webkit-scrollbar-thumb, .ret-list::-webkit-scrollbar-thumb,
+  .log-list::-webkit-scrollbar-thumb, .product-pane::-webkit-scrollbar-thumb {
+    background: #c8c2b6; border-radius: var(--r-pill); border: 3px solid transparent; background-clip: content-box;
+  }
+  .panel::-webkit-scrollbar-track, .table-wrap::-webkit-scrollbar-track, .modal::-webkit-scrollbar-track,
+  .cart-items::-webkit-scrollbar-track, .ret-list::-webkit-scrollbar-track,
+  .log-list::-webkit-scrollbar-track, .product-pane::-webkit-scrollbar-track { background: transparent; }
+
+  /* ═══════════ 누름 ═══════════
+     쓰는 사람이 계산대에서 하루에 수백 번 누른다. 눌렸는지가 손끝과 눈 모두에
+     즉시 잡혀야 한다. 두께 → 내려앉음 → 되올라옴. 되올라오는 쪽을 길게 둬야
+     '튕겨 오른다'가 아니라 '놓았다'로 읽힌다. */
+  button, .btn, .book-btn, .mini-btn, .icon-btn, .biz-chip,
+  .cats button, .period button, .tabs button, .pay-methods button,
+  .disc-toggle button, .cart-row .qty button, .cart-row .del button,
+  .ret-qty button, .mb-open, .pay-actions .clear, .pay-actions .hold, .pay-actions .checkout {
+    font-family: inherit;
+    transition: transform var(--press-out), box-shadow var(--press-out),
+                background var(--press-out), border-color var(--press-out), color var(--press-out);
+    touch-action: manipulation;
+  }
+  button:active:not(:disabled), .btn:active:not(:disabled), .book-btn:active:not(.out),
+  .mini-btn:active:not(:disabled), .icon-btn:active, .biz-chip:active,
+  .cats button:active, .period button:active, .pay-methods button:active,
+  .disc-toggle button:active, .cart-row .qty button:active, .cart-row .del button:active,
+  .ret-qty button:active, .mb-open:active:not(:disabled),
+  .pay-actions .clear:active, .pay-actions .hold:active:not(:disabled),
+  .pay-actions .checkout:active:not(:disabled) {
+    transition-duration: var(--press-in);
+    transform: translateY(2px);
+  }
+  /* 두께가 있는 버튼들 — 눌리면 옆면이 사라진다 */
+  .btn.primary, .btn.green, .btn.solid-danger, .pay-actions .checkout,
+  .pay-actions .clear, .pay-actions .hold, .mb-open, .login-card button, #updateBar button {
+    box-shadow: 0 2px 0 var(--btn-edge, rgba(0,0,0,.22)), var(--sh-1);
+  }
+  .btn.primary:active:not(:disabled), .btn.green:active:not(:disabled),
+  .btn.solid-danger:active:not(:disabled), .pay-actions .checkout:active:not(:disabled),
+  .pay-actions .clear:active, .pay-actions .hold:active:not(:disabled), .mb-open:active:not(:disabled),
+  .login-card button:active:not(:disabled), #updateBar button:active {
+    box-shadow: 0 0 0 var(--btn-edge, rgba(0,0,0,.22));
+  }
+  @media (hover: hover) {
+    .btn.primary:hover:not(:disabled) { background: var(--blue-light); }
+    .btn.green:hover:not(:disabled), .pay-actions .checkout:hover:not(:disabled) { filter: brightness(1.08); }
+    .btn.ghost:hover:not(:disabled) { background: var(--surface-2); border-color: #cfc9bd; }
+    .btn.danger:hover:not(:disabled) { background: var(--red-wash); }
+    .mini-btn:hover:not(:disabled) { background: var(--surface-2); border-color: #cfc9bd; }
+    .act-row:hover { background: var(--surface-2); }
+    .act-row.danger:hover { background: var(--red-wash); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    button:active, .btn:active, .book-btn:active { transform: none !important; }
+  }
+  /* 투명한 재료를 불편해하는 설정에서는 불투명하게 — 흐림은 끄고 배경을 채운다 */
+  @media (prefers-reduced-transparency: reduce) {
+    .mobile-bar { background: var(--ink); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  }
+  /* 대비를 높게 쓰는 설정에서는 경계를 분명히 */
+  @media (prefers-contrast: more) {
+    .mobile-bar { background: var(--ink); backdrop-filter: none; -webkit-backdrop-filter: none; }
+    .book-btn, .table-wrap, .modal, .cart-pane { border-color: var(--ink-3); }
+    .stat { border-left-color: var(--ink-3); }
+    .cat-badge, .pill { color: var(--text); }
+  }
+
+  /* ═══════════ Header ═══════════ */
+  header {
+    background: var(--ink);
+    color: var(--on-ink);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 0 18px; flex-shrink: 0;
+    padding-top: env(safe-area-inset-top, 0px);
+    height: calc(54px + env(safe-area-inset-top, 0px));
+  }
+  /* 좁아지면 이름이 먼저 줄어든다 — 오른쪽 도구(개업·연결·설정)는 무슨 일이 있어도 화면 안에 남는다 */
+  header .brand {
+    font-size: var(--fs-lg); font-weight: 500; letter-spacing: var(--tr-lg); white-space: nowrap;
+    min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  }
+  header .brand span { color: var(--on-ink-dim); font-weight: 500; font-size: var(--fs-2xs); margin-left: 8px; }
+  header .info { font-size: var(--fs-xs); color: var(--on-ink-dim); display: flex; gap: 14px; align-items: center; flex-shrink: 0; }
+  header .info > div { white-space: nowrap; }
+  header .info b { color: #fff; font-weight: 600; }
+  header .clock { font-variant-numeric: tabular-nums; }
+
+  /* ═══════════ 개업 / 마감 ═══════════ */
+  .biz-chip {
+    border: 1px solid transparent; border-radius: var(--r-pill); padding: 5px 12px;
+    font-size: var(--fs-2xs); font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  .biz-chip.on  { background: rgba(84,214,150,.16); border-color: rgba(84,214,150,.42); color: #a7ebc7; }
+  .biz-chip.off { background: rgba(255,190,110,.16); border-color: rgba(255,190,110,.45); color: #ffd8a8; }
+  #bizScreen {
+    position: fixed; inset: 0; z-index: 480; background: var(--ink);
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  .biz-card {
+    background: var(--surface); border-radius: var(--r-lg); padding: 34px 30px; width: 390px; max-width: 100%;
+    text-align: center; box-shadow: var(--sh-3);
+  }
+  .biz-card .biz-icon { font-size: 38px; line-height: 1; }
+  .biz-card h2 { margin: 14px 0 6px; font-size: var(--fs-xl); letter-spacing: var(--tr-xl); }
+  .biz-card .biz-sub { color: var(--muted); font-size: var(--fs-xs); margin: 0 0 20px; line-height: 1.65; }
+  .biz-card .btn { width: 100%; min-height: 50px; font-size: var(--fs-md); }
+  .biz-card .btn + .btn { margin-top: 8px; }
+  .biz-last {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-md);
+    padding: 14px 16px; margin-bottom: 20px; font-size: var(--fs-xs); text-align: left; line-height: 1.7;
+  }
+  .biz-last .big { font-size: var(--fs-xl); font-weight: 700; }
+  .close-sum { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 14px; }
+  .close-sum .row { display: flex; justify-content: space-between; font-size: var(--fs-sm); }
+  .close-sum .row.total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 9px; font-size: var(--fs-lg); font-weight: 700; }
+  .close-sum .row .dim { color: var(--muted); }
+  .icon-btn {
+    background: rgba(255,255,255,.10); color: #fff; border: 1px solid rgba(255,255,255,.20);
+    border-radius: var(--r-sm); min-width: 38px; height: 34px; padding: 0 11px;
+    font-size: var(--fs-xs); font-weight: 600; cursor: pointer; display: inline-flex;
+    align-items: center; justify-content: center; gap: 5px;
+  }
+  @media (hover: hover) { .icon-btn:hover { background: rgba(255,255,255,.2); } }
+
+  .sync {
+    display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-2xs); font-weight: 600;
+    background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.18);
+    padding: 5px 11px; border-radius: var(--r-pill); white-space: nowrap; color: #cbd6e6;
+    cursor: pointer; user-select: none;
+  }
+  .sync:focus-visible { outline: 2px solid #ffcb45; outline-offset: 2px; }
+  .sync .dot { width: 8px; height: 8px; border-radius: 50%; background: #54d696; flex-shrink: 0; }
+  .sync.warn { background: rgba(255,206,90,.15); border-color: rgba(255,206,90,.4); color: #ffe3a3; }
+  .sync.warn .dot { background: #ffce5a; animation: pulse 1.4s ease-in-out infinite; }
+  .sync.off { background: rgba(255,130,130,.16); border-color: rgba(255,130,130,.42); color: #ffd0d0; }
+  .sync.off .dot { background: #ff8282; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  /* 시트로 오래 못 간 기록 · 시트와 다른 재고 — 어느 기기에서든 위쪽에 뜬다 */
+  .sheet-chip {
+    font-size: var(--fs-2xs); font-weight: 600; white-space: nowrap; cursor: pointer;
+    background: rgba(255,206,90,.15); border: 1px solid rgba(255,206,90,.4); color: #ffe3a3;
+    padding: 5px 11px; border-radius: var(--r-pill);
+  }
+
+  /* ═══════════ Login ═══════════ */
+  #loginScreen {
+    position: fixed; inset: 0; z-index: 500; background: var(--ink);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .login-card {
+    background: var(--surface); border-radius: var(--r-lg); padding: 36px 32px; width: 360px; max-width: 100%;
+    box-shadow: var(--sh-3); display: flex; flex-direction: column;
+  }
+  .login-brand { font-size: var(--fs-2xl); font-weight: 600; color: var(--text); text-align: center; letter-spacing: var(--tr-2xl); }
+  .login-sub { font-size: var(--fs-xs); color: var(--muted); text-align: center; margin: 8px 0 24px; }
+  .login-card input {
+    padding: 14px; border: 2px solid var(--line); border-radius: var(--r-sm); font-size: 16px;
+    margin-bottom: 10px; background: var(--surface-2); color: inherit;
+  }
+  .login-card input:focus { outline: none; border-color: var(--blue); background: #fff; }
+  .login-card button {
+    padding: 15px 0; border: none; border-radius: var(--r-sm); background: var(--blue); color: #fff;
+    font-size: var(--fs-md); font-weight: 700; cursor: pointer; margin-top: 6px;
+    --btn-edge: #0e3287;
+  }
+  .login-card button:disabled { background: #93a4c6; cursor: progress; }
+  .login-err { color: var(--red); font-size: var(--fs-xs); font-weight: 600; text-align: center; min-height: 18px; margin-top: 12px; }
+
+  /* ═══════════ Tabs ═══════════ */
+  .tabs { display: flex; background: var(--ink-2); flex-shrink: 0; }
+  .tabs button {
+    flex: 1; border: none; background: transparent; color: var(--on-ink-dim);
+    font-size: var(--fs-sm); font-weight: 500; padding: 13px 4px; cursor: pointer;
+    min-height: var(--tap); white-space: nowrap; position: relative; letter-spacing: var(--tr-sm);
+  }
+  .tabs button::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+    background: transparent; transition: background var(--press-out);
+  }
+  .tabs button.active { color: #fff; background: rgba(255,255,255,.06); }
+  .tabs button.active::after { background: #ffcb45; }
+  @media (hover: hover) { .tabs button:not(.active):hover { color: #dbe2ec; background: rgba(255,255,255,.03); } }
+
+  main { flex: 1; overflow: hidden; }
+  .view { display: none; height: 100%; }
+  .view.active { display: flex; }
+
+  /* ═══════════ 장바구니 — 어느 화면 폭에서든 아래에서 올라오는 판 ═══════════
+     책 그리드가 화면을 가득 쓰고, 담기 시작하면 판이 올라온다.
+     넓은 화면에서는 오른쪽에 붙어 그리드를 덮지 않는다. */
+  /* 장바구니는 왼쪽에 세로로 꽉 찬 판이다. 계산 중에는 담긴 것이 늘 통째로 보여야 하고,
+     스크롤로 찾아 내려가는 일이 없어야 한다. 열고 닫히기는 하되 옆으로 미끄러진다. */
+  .cart-pane {
+    position: fixed; left: 0; bottom: 0; z-index: 95;
+    /* 머리·탭 아래에서 시작한다 — 판이 앱 머리를 덮으면 어디에 있는지가 사라진다 */
+    top: calc(54px + 48px + env(safe-area-inset-top, 0px));
+    width: 400px; max-width: 100%;
+    background: var(--surface);
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--line);
+    box-shadow: 6px 0 28px rgba(16,26,48,.14);
+    transform: translateX(-100%);
+    transition: transform var(--slide);
+    padding-bottom: var(--safe-b);
+  }
+  .cart-pane.open { transform: translateX(0); }
+  .cart-head {
+    display: grid; grid-template-columns: 1fr 84px 108px 44px;
+    background: var(--ink-2); color: #fff; font-size: var(--fs-xs); font-weight: 500;
+    padding: 13px 16px; gap: 6px; position: relative; align-items: center;
+  }
+  .cart-head span:nth-child(2){ text-align:center; }
+  .cart-head span:nth-child(3){ text-align:right; }
+  .cart-head .sheet-close {
+    display: block;
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    background: rgba(255,255,255,.14); border: none; color: #fff; width: 30px; height: 30px;
+    border-radius: 50%; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  .cart-items { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; min-height: 0; }
+  .cart-empty { flex: 1; }
+  .cart-row {
+    display: grid; grid-template-columns: 1fr 84px 108px 44px; gap: 6px;
+    align-items: center; padding: 11px 16px; border-bottom: 1px solid var(--line-soft);
+    font-size: var(--fs-sm);
+  }
+  .cart-row .title { font-weight: 500; line-height: 1.35; }
+  .cart-row .qty { display: flex; align-items: center; justify-content: center; gap: 4px; }
+  .cart-row .qty button {
+    width: 28px; height: 28px; border: 1px solid var(--line); background: var(--gray);
+    border-radius: 7px; cursor: pointer; font-size: 15px; font-weight: 600; line-height: 1; color: var(--text);
+  }
+  .cart-row .qty span { min-width: 20px; text-align: center; font-weight: 600; }
+  .cart-row .amt { text-align: right; font-weight: 600; }
+  /* 택배비 줄만 금액을 누를 수 있다 — 크기·무게마다 달라서. 밑줄 점선이 '눌러서 고침' 표시 */
+  .cart-row .amt-edit {
+    border: none; background: none; padding: 4px 0; font: inherit; font-weight: 600;
+    color: var(--blue); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;
+  }
+  .cart-row .title .ship-note { display: block; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .cart-row .del { text-align: center; }
+  .cart-row .del button {
+    width: 30px; height: 30px; border: none; background: var(--red-wash); color: var(--red);
+    border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;
+  }
+  .cart-empty {
+    height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 28px 20px; text-align: center; color: var(--muted); font-size: var(--fs-sm); line-height: 1.6;
+  }
+
+  .summary { border-top: 1px solid var(--line); padding: 13px 16px; background: var(--surface-2); }
+  .sum-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 2px; font-size: var(--fs-md); }
+  .sum-row.total { font-size: 22px; font-weight: 600; color: var(--text); border-top: 1px solid var(--line); margin-top: 7px; padding-top: 12px; letter-spacing: var(--tr-2xl); }
+  .sum-row .k { color: var(--muted); }
+  .sum-row .disc-input { display: flex; align-items: center; gap: 6px; }
+  .sum-row .disc-input input { width: 92px; text-align: right; padding: 8px 10px; border: 2px solid var(--line); border-radius: 8px; font-size: var(--fs-md); font-weight: 600; color: var(--red); background:#fff; }
+  .sum-row .disc-input input:focus { outline: none; border-color: var(--red); }
+  .sum-row .disc-input em { font-style: normal; color: var(--muted); font-size: var(--fs-sm); width: 14px; }
+  .disc-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .disc-toggle button { border: none; background: #fff; color: var(--muted); font-size: var(--fs-xs); font-weight: 600; padding: 8px 12px; cursor: pointer; }
+  .disc-toggle button.on { background: var(--ink-2); color: #fff; }
+  .sum-row.disc-calc { padding: 0 2px 4px; margin-top: -4px; min-height: 18px; }
+  .sum-row.disc-calc #discCalc { color: var(--red); font-size: var(--fs-xs); font-weight: 600; }
+
+  .pay-methods { display: flex; gap: 6px; padding: 0 16px 10px; }
+  .pay-methods button {
+    flex: 1; min-height: var(--tap); border: 2px solid var(--line); background: #fff; padding: 0 4px;
+    border-radius: var(--r-sm); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; color: var(--muted);
+    white-space: nowrap;
+  }
+  .pay-methods button.sel { border-color: var(--blue); background: var(--blue-wash); color: var(--blue-dark); }
+  .pay-methods button[data-method="현금"].sel { border-color: var(--green); background: var(--green-wash); color: var(--green-dark); }
+  .pay-methods button[data-method="분할"].sel { border-color: var(--amber); background: var(--amber-wash); color: var(--amber); }
+
+  .split-pay { padding: 0 16px 10px; }
+  .split-pay.hide { display: none; }
+  .sp-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 2px; font-size: var(--fs-md); }
+  .sp-row .sp-k { color: var(--muted); font-weight: 600; }
+  .sp-row input {
+    width: 118px; text-align: right; padding: 9px 11px; border: 2px solid var(--line);
+    border-radius: 8px; font-size: 16px; font-weight: 700; color: var(--green-dark); background: #fff;
+  }
+  .sp-row input:focus { outline: none; border-color: var(--green); }
+  .sp-row em { font-style: normal; color: var(--muted); font-size: var(--fs-sm); margin-left: 5px; }
+  .sp-row .sp-v { font-size: 16px; font-weight: 700; color: var(--blue-dark); }
+  .sp-row .sp-v.bad { color: var(--red); }
+  .sp-hint { font-size: var(--fs-2xs); color: var(--muted); padding: 2px 2px 0; }
+  .sp-hint.bad { color: var(--red); font-weight: 600; }
+  .sp-row.total { border-top: 1px solid var(--line); margin-top: 5px; padding-top: 9px; }
+  #mRefundCash, #mRefundTr { width: 130px; }
+  #mRefundTr { color: var(--blue-dark); }
+  #mRefundTr:focus { border-color: var(--blue); }
+
+  .customer { padding: 0 16px 10px; }
+  .customer.hide { display: none; }
+  .customer label { font-size: var(--fs-2xs); color: var(--muted); display:block; margin-bottom:5px; font-weight: 500; }
+  .customer input {
+    width: 100%; padding: 11px 12px; border: 2px solid var(--line); border-radius: var(--r-sm);
+    font-size: 16px; font-weight: 600; background: #fff; color: inherit;
+  }
+  .customer input:focus { outline: none; border-color: var(--blue); }
+  .customer label + input + label, .contact-extra label { margin-top: 8px; }
+  .more-toggle {
+    margin-top: 8px; background: none; border: none; padding: 0; cursor: pointer;
+    font-size: var(--fs-2xs); font-weight: 600; color: var(--blue);
+  }
+  .contact-extra.hide { display: none; }
+
+  /* 버튼 셋이 한 줄에 선다 — 너비는 글자가 정한다. 30% 씩 나눠 주면 폰 세로에서
+     '결제 완료' 가 먼저 좁아진다. 주 동작이 남는 자리를 다 갖고, 나머지는 제 글자만큼만. */
+  .pay-actions { display: flex; gap: 7px; padding: 0 16px 16px; }
+  .pay-actions .clear {
+    flex: 0 0 auto; padding: 0 14px; min-height: 52px; border: none; border-radius: var(--r-sm);
+    background: var(--gray);
+    color: var(--ink-3); font-size: var(--fs-md); font-weight: 600; cursor: pointer;
+    --btn-edge: #d5d0c5;
+  }
+  /* 대기는 앰버다 — 이 앱에서 앰버는 이미 '아직 안 끝난 것'(분할결제·재고 부족)을 뜻한다.
+     초록(결제 완료)도 빨강(비우기·반품)도 건드리지 않는다. */
+  .pay-actions .hold {
+    flex: 0 0 auto; padding: 0 14px; min-height: 52px; border: 1px solid var(--amber-line);
+    border-radius: var(--r-sm); background: var(--amber-wash);
+    color: var(--amber); font-size: var(--fs-md); font-weight: 600; cursor: pointer;
+    --btn-edge: #e0c68d;
+  }
+  .pay-actions .hold:disabled { opacity: .42; cursor: not-allowed; box-shadow: none; --btn-edge: transparent; }
+  .pay-actions .checkout {
+    flex: 1; min-height: 52px; border: none; border-radius: var(--r-sm); background: var(--green);
+    color: #fff; font-size: var(--fs-lg); font-weight: 600; cursor: pointer; letter-spacing: var(--tr-lg);
+    --btn-edge: #08472c;
+  }
+  .pay-actions .checkout:disabled { background: #b9bfc4; cursor: not-allowed; box-shadow: none; --btn-edge: transparent; }
+  /* 0원 출고 — 돈이 안 들어오는 건이라 초록(매출)을 쓰면 안 된다.
+     앰버는 이 앱에서 '보통 결제가 아닌 것'을 맡는 색이다. */
+  .pay-actions .checkout.free { background: var(--amber); --btn-edge: #6d4a06; }
+  .customer.free label { color: var(--amber); }
+  .customer.free input { border-color: var(--amber-line); background: var(--amber-wash); }
+
+  /* ═══════════ 상품 그리드 ═══════════ */
+  .product-pane { flex: 1; padding: 18px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+                  padding-bottom: calc(var(--bar-h) + var(--safe-b) + 18px); }
+  /* 장바구니가 왼쪽에 서 있는 동안은 화면 전체가 그만큼 비켜 준다 — 책이 가려지지 않게.
+     여백은 일부러 애니메이션하지 않는다: 책이 212종이라 padding 을 굴리면 그리드가
+     매 프레임 다시 계산돼 판이 미끄러지는 동안 화면이 끊긴다. 판만 움직이고 자리는 즉시 잡는다. */
+  @media (min-width: 900px) {
+    body.cart-open main { padding-left: 400px; }
+    body.cart-open .mobile-bar { padding-left: calc(400px + 18px); }
+  }
+  .product-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+  .product-head h3 { font-size: var(--fs-sm); color: var(--muted); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(208px, 1fr)); gap: 12px; }
+  .book-btn {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+    padding: 16px 15px; cursor: pointer; text-align: left; position: relative;
+    box-shadow: var(--sh-1);
+    display: flex; flex-direction: column; gap: 8px; min-height: 116px; color: inherit;
+  }
+  @media (hover: hover) {
+    .book-btn:hover:not(.out) { border-color: var(--blue-light); box-shadow: var(--sh-2); }
+  }
+  .book-btn:active:not(.out) { box-shadow: none; border-color: var(--blue); }
+  .book-btn.out { opacity: .45; cursor: not-allowed; }
+  .book-btn .bt {
+    font-size: var(--fs-md); font-weight: 600; line-height: 1.35;
+    min-height: calc(2 * 1.35em);
+  }
+  /* 배지 자리는 첫 줄에서만 비운다. 제목 전체를 밀어내면 좁은 카드에서 글자 폭이 절반으로
+     줄어 '42HB 단본 / 성경 (인디고 / 블루)' 처럼 잘게 쪼개진다. 제목은 절대 자르지 않는다. */
+  .book-btn .bt::before { content: ''; float: right; width: 62px; height: 1.35em; }
+  .book-btn .bp { font-size: var(--fs-lg); font-weight: 600; color: var(--text); margin-top: auto; padding-top: 10px; }
+  /* 재고도 칩을 씌우지 않는다. 카드마다 회색 알약이 하나씩 떠 있으면 그게 먼저 보인다.
+     숫자만 두고 상태는 색으로 말한다 — 평소엔 흐리게, 모자라면 앰버, 품절이면 빨강. */
+  .book-btn .bs {
+    position: absolute; top: 14px; right: 15px; font-size: var(--fs-2xs); font-weight: 600;
+    color: var(--muted); white-space: nowrap; background: none; padding: 0; border-radius: 0;
+    font-variant-numeric: tabular-nums; text-align: right; line-height: 1.35;
+  }
+  .book-btn .bs.low  { color: var(--amber); }
+  .book-btn .bs.zero { color: var(--red); }
+  /* 대기에 잡힌 권수는 재고 바로 밑에 붙는다 — '재고가 왜 줄었지' 를 숫자 옆에서 바로 답한다 */
+  .book-btn .bs em { display: block; font-style: normal; color: var(--amber); font-size: 12px; }
+
+  /* ═══════════ 결제대기 ═══════════
+     손님이 몰릴 때 담다 만 장바구니를 통째로 옆에 세워 둔다.
+     자리는 상품 창 맨 위 한 줄 — 대기가 없으면 줄 자체가 사라져서 평소 화면은 그대로다.
+     칩 하나가 손님 하나고, 누르면 그 손님이 장바구니로 돌아온다. */
+  .holds-bar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: var(--amber-wash); border: 1px solid var(--amber-line);
+    border-radius: var(--r-md); padding: 9px 11px; margin-bottom: 14px;
+  }
+  .holds-bar.hide { display: none; }
+  .holds-lbl {
+    flex: none; font-size: var(--fs-2xs); font-weight: 600; color: var(--amber); letter-spacing: .04em;
+  }
+  .hold-chip {
+    display: inline-flex; align-items: center; background: #fff;
+    border: 1px solid var(--amber-line); border-radius: var(--r-pill);
+    box-shadow: var(--sh-1); overflow: hidden;
+  }
+  .hold-chip .hc-open {
+    display: inline-flex; align-items: center; gap: 9px; border: none; background: none;
+    cursor: pointer; color: inherit; padding: 0 5px 0 14px;
+    min-height: var(--pill-h); font-size: var(--fs-2xs);
+  }
+  .hold-chip .hc-open b { font-weight: 600; }
+  .hold-chip .hc-qty { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hold-chip .hc-amt { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .hold-chip.compact .hc-open { padding: 0 3px 0 13px; }
+  .hold-chip .hc-drop {
+    border: none; background: none; cursor: pointer; color: var(--muted);
+    width: 32px; min-height: var(--pill-h); font-size: 13px; font-weight: 600;
+  }
+  /* 칩은 알약 하나로 읽혀야 한다 — 안쪽 버튼만 2px 내려앉으면 껍질이 남아 어긋나 보인다.
+     그래서 누름은 자리 이동이 아니라 바탕색으로 말한다. */
+  .hold-chip .hc-open:active { transform: none; background: var(--amber-wash); }
+  .hold-chip .hc-drop:active { transform: none; background: var(--red-wash); color: var(--red); }
+  @media (hover: hover) {
+    .hold-chip:hover { border-color: var(--amber); box-shadow: var(--sh-2); }
+    .hold-chip .hc-drop:hover { color: var(--red); background: var(--red-wash); }
+  }
+  /* 마감 창에서 남은 대기를 알리는 상자 — 빨강(되돌릴 수 없음)이 아니라 앰버(안 끝남)다 */
+  .hold-warn {
+    background: var(--amber-wash); border: 1px solid var(--amber-line); border-radius: var(--r-sm);
+    padding: 13px 15px; font-size: var(--fs-xs); color: #6d4a06; line-height: 1.65; margin-bottom: 15px;
+  }
+  .hold-warn ul { margin: 8px 0 0 17px; }
+  .hold-warn li { font-variant-numeric: tabular-nums; }
+
+  /* ═══════════ 교환 — 차액 ═══════════
+     교환에서 사람이 보는 숫자는 딱 하나, '얼마를 더 받나 / 돌려주나' 다.
+     그래서 목록보다 크게, 부호가 아니라 말로 적는다. */
+  .ex-diff {
+    border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface-2);
+    padding: 14px 16px; margin: 14px 0;
+  }
+  .ex-diff .ex-row {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: var(--fs-xs); color: var(--muted); padding: 3px 0;
+  }
+  .ex-diff .ex-row b { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 500; }
+  .ex-diff .ex-total {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+    border-top: 1px solid var(--line); margin-top: 8px; padding-top: 11px;
+  }
+  .ex-diff .ex-total .k { font-size: var(--fs-sm); font-weight: 600; }
+  .ex-diff .ex-total .v {
+    font-size: var(--fs-2xl); font-weight: 600; letter-spacing: var(--tr-2xl);
+    font-variant-numeric: tabular-nums;
+  }
+  .ex-diff.get   .ex-total .k, .ex-diff.get   .ex-total .v { color: var(--green-dark); }
+  .ex-diff.give  .ex-total .k, .ex-diff.give  .ex-total .v { color: var(--red); }
+  .ex-diff.even  .ex-total .v { color: var(--muted); }
+  .ex-cart { font-size: var(--fs-xs); line-height: 1.6; }
+  .ex-cart b { font-weight: 600; }
+
+  /* ═══════════ 항상 보이는 액션 바 ═══════════
+     어느 화면에서든 바닥에 '지금 할 일'이 고정돼 있다. 폰 세로에서는 이게 엄지 자리다. */
+  /* 바닥 바는 불투명한 띠가 아니라 내용 위에 떠 있는 재료다 — 책이 그 아래로 지나간다.
+     경계는 1px 선이 아니라, 내용이 바에 닿는 자리에서 옅게 흐려지는 가장자리로 만든다. */
+  .mobile-bar {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 93;
+    background: rgba(22,35,63,.82);
+    backdrop-filter: blur(18px) saturate(170%);
+    -webkit-backdrop-filter: blur(18px) saturate(170%);
+    color: var(--on-ink);
+    box-shadow: 0 -1px 0 rgba(255,255,255,.10) inset, 0 -12px 28px rgba(12,20,40,.14);
+    padding: 0 18px; gap: 14px; align-items: center;
+    height: calc(var(--bar-h) + var(--safe-b));
+    padding-bottom: var(--safe-b);
+  }
+  .mobile-bar .mb-sum { flex: 1; min-width: 0; }
+  .mobile-bar .mb-qty { font-size: var(--fs-2xs); color: var(--on-ink-dim); font-weight: 500; }
+  .mobile-bar .mb-amt { font-size: 26px; font-weight: 600; color: #fff; }
+  .mobile-bar .mb-open {
+    border: none; background: var(--green); color: #fff; border-radius: var(--r-sm);
+    min-height: 48px; padding: 0 24px; font-size: var(--fs-md); font-weight: 700; cursor: pointer;
+    --btn-edge: #08472c;
+  }
+  .mobile-bar .mb-open:disabled { background: #3a4353; color: #8b95a6; box-shadow: none; --btn-edge: transparent; cursor: not-allowed; }
+
+  .sheet-backdrop {
+    display: block; position: fixed; inset: 0; background: rgba(16,22,32,.5);
+    z-index: 94; opacity: 0; pointer-events: none; transition: opacity .22s;
+  }
+  .sheet-backdrop.show { opacity: 1; pointer-events: auto; }
+
+  /* ═══════════ 패널 공통 ═══════════ */
+  .panel { flex: 1; padding: 22px; overflow-y: auto; width: 100%; -webkit-overflow-scrolling: touch;
+           padding-bottom: calc(var(--bar-h) + var(--safe-b) + 22px); }
+  .panel-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+  .panel-head h2 { font-size: var(--fs-xl); }
+  .panel-head .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    padding: 0 16px; min-height: 40px; border: none; border-radius: var(--r-sm); font-size: var(--fs-sm);
+    font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .btn.primary { background: var(--blue); color: #fff; --btn-edge: #0e3287; }
+  .btn.green { background: var(--green); color: #fff; --btn-edge: #08472c; }
+  .btn.ghost { background: #fff; border: 1px solid var(--line); color: var(--text); box-shadow: var(--sh-1); }
+  .btn.ghost:active { box-shadow: none; }
+  .btn.danger { background: #fff; border: 1px solid #eec4c0; color: var(--red); box-shadow: var(--sh-1); }
+  .btn.danger:active { box-shadow: none; }
+  .btn.solid-danger { background: var(--red); color: #fff; --btn-edge: #8d221b; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; --btn-edge: transparent; }
+
+  /* ═══════════ 검색 / 필터 ═══════════ */
+  .search {
+    height: 40px; padding: 0 13px; border: 1px solid var(--line); border-radius: var(--r-sm);
+    font-size: var(--fs-sm); background: #fff; color: inherit; min-width: 0;
+  }
+  .search:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-wash); }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+  .filters .search { flex: 1 1 240px; }
+  .filters input[type=date], .filters select {
+    height: 40px; padding: 0 11px; border: 1px solid var(--line); border-radius: var(--r-sm);
+    font-size: var(--fs-xs); background: #fff; color: inherit;
+  }
+  .filters .sep { color: var(--muted); font-size: var(--fs-xs); }
+  .filters .chk {
+    display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 13px;
+    border: 1px solid var(--line); border-radius: var(--r-sm); background: #fff;
+    font-size: var(--fs-xs); font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap;
+  }
+  .filters .chk input { width: 15px; height: 15px; accent-color: var(--blue); cursor: pointer; }
+  .filters .count { font-size: var(--fs-xs); color: var(--muted); font-weight: 600; margin-left: auto; white-space: nowrap; }
+  .filters .count b { color: var(--text); }
+  .filters.on .search { border-color: var(--blue); }
+
+  /* ═══════════ 분류 칩 ═══════════ */
+  .cats { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .cats button {
+    padding: 0 15px; min-height: var(--pill-h); border: 1px solid var(--line); background: #fff;
+    border-radius: var(--r-pill); font-size: var(--fs-xs); font-weight: 600; cursor: pointer; color: var(--muted);
+  }
+  .cats button.on { background: var(--ink-2); border-color: var(--ink-2); color: #fff; }
+  .cats button .n { font-weight: 500; opacity: .65; margin-left: 5px; font-size: var(--fs-2xs); }
+  /* 분류는 알약에 담지 않는다. 색 채운 둥근 칩은 어느 UI 키트에나 있는 얼굴이고,
+     제목 옆에 붙으면 제목보다 먼저 눈에 든다. 장부의 방주(傍註)처럼
+     앞에 색 눈금 하나 세우고 글자만 남긴다 — 조용하지만 색으로 바로 갈린다. */
+  .cat-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: var(--fs-2xs); font-weight: 600; color: var(--muted);
+    margin-right: 9px; vertical-align: middle; letter-spacing: .01em;
+    background: none; padding: 0; border-radius: 0;
+  }
+  .cat-badge::before {
+    content: ''; width: 3px; height: 11px; border-radius: 1px;
+    background: currentColor; opacity: .85; flex: none;
+  }
+  /* 성경 네 갈래는 전부 파랑이다 — 시트에서 [성경] 하나인 것들이라 한 식구로 보여야 한다.
+     가르는 건 색이 아니라 눈금의 결: 꽉 참 · 위 반 · 아래 반 · 점선. */
+  .cat-badge.c-bible   { color: var(--blue); }
+  .cat-badge.c-bible2  { color: var(--blue-light); }
+  .cat-badge.c-bible2::before { background: linear-gradient(var(--blue-light) 50%, transparent 50%); }
+  .cat-badge.c-bible3  { color: var(--blue-dark); }
+  .cat-badge.c-bible3::before { background: linear-gradient(transparent 50%, var(--blue-dark) 50%); }
+  .cat-badge.c-bible4  { color: var(--blue-light); }
+  .cat-badge.c-bible4::before {
+    background: repeating-linear-gradient(var(--blue-light) 0 3px, transparent 3px 5px);
+  }
+  /* 찬송가는 성경이 아니라 어린이·일반과 같은 줄의 독립 분류다. 파랑 식구에서 빼야
+     한눈에 갈린다 — 남은 뜻 색(초록=매출, 빨강=환불, 앰버=경고)과 겹치지 않는 자리. */
+  .cat-badge.c-hymn    { color: var(--violet); }
+  .cat-badge.c-kids    { color: var(--amber); }
+  .cat-badge.c-general { color: var(--green-dark); }
+  .cat-badge.c-etc     { color: var(--muted); }
+
+  /* ═══════════ 통계 카드 ═══════════ */
+  /* 숫자는 카드에 담지 않는다. 흰 상자 + 옅은 테두리 + 큰 숫자는 어느 대시보드에나
+     붙어 있는 기성품 얼굴이라, 이 앱이 무엇인지 하나도 말해 주지 않는다.
+     대신 장부의 숫자 단처럼 종이 위에 세로 괘선으로만 갈라 놓는다. */
+  .cards {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(158px,1fr));
+    gap: 0; margin-bottom: 22px;
+    border-top: 2px solid var(--ink); border-bottom: 1px solid var(--line);
+  }
+  .stat { padding: 14px 18px 15px; border-left: 1px solid var(--line-soft); background: transparent; }
+  .stat:first-child { border-left: none; padding-left: 0; }
+  .stat .lbl {
+    font-size: var(--fs-2xs); color: var(--muted); margin-bottom: 7px; font-weight: 500;
+    letter-spacing: .02em;
+  }
+  .stat .val { font-size: var(--fs-2xl); font-weight: 600; color: var(--text); }
+  .stat .val.green { color: var(--green-dark); }
+  .stat .val.red { color: var(--red); }
+  .stat .val.muted { color: var(--muted); }
+  .stat .sub { font-size: var(--fs-2xs); color: var(--muted); margin-top: 6px; line-height: 1.45; }
+  .stat .sub .warn-text { color: var(--amber); font-weight: 600; }
+  /* 대표 숫자는 글자가 큰 만큼 자리도 두 칸을 쓴다 — 안 그러면 '1,842,000 / 원' 으로 갈라진다 */
+  .stat.hero { grid-column: span 2; }
+  .stat.hero .val { font-size: var(--fs-3xl); font-weight: 600; }
+  .stat.hero .lbl { color: var(--ink-3); font-weight: 600; }
+
+  /* ═══════════ 리포트 요약 — 내려가도 따라온다 ═══════════
+     책별 순수익을 훑으러 아래로 내려가면 '무슨 기간, 얼마'가 화면에서 사라진다.
+     그래서 요약이 판 위에 붙어 따라오되, 붙는 순간 한 줄로 줄어든다 —
+     큰 숫자 그대로 따라오면 표를 절반이나 덮기 때문.
+     줄어드는 건 '접힌다'가 아니라 '멀어진다' — 글자만 작아지고 자리는 그대로다. */
+  .sticky-sum {
+    position: sticky; top: 0; z-index: 40;
+    background: var(--bg); margin-bottom: 22px;
+    transition: box-shadow var(--settle), border-bottom-color var(--settle);
+  }
+  .sticky-sum .stat { transition: padding var(--settle); }
+  .sticky-sum .stat .lbl,
+  .sticky-sum .stat .val {
+    transition: font-size var(--settle), margin var(--settle);
+  }
+  /* 곁줄은 높이째로 접힌다. height: auto → 0 은 애니메이션이 안 되므로 max-height 로 민다 —
+     안 그러면 글자만 서서히 사라지고 자리는 한 번에 툭 꺼져 그 순간만 덜컥거린다. */
+  .sticky-sum .stat .sub {
+    max-height: 40px; overflow: hidden;
+    transition: max-height var(--settle), margin var(--settle), opacity var(--settle);
+  }
+  /* 붙어 있는 동안 */
+  .sticky-sum.stuck {
+    box-shadow: 0 10px 20px -14px rgba(16,26,48,.35);
+    border-bottom-color: var(--ink-3);
+  }
+  /* 줄어드는 폭은 일부러 작게 잡았다. 26 → 17 처럼 크게 줄이면 눈이 '글자가 바뀌었다'로 읽는다.
+     한 걸음만 물러나야 '멀어졌다'로 읽힌다 — 아낀 높이는 그래도 28px 남짓이다. */
+  .sticky-sum.stuck .stat { padding-top: 9px; padding-bottom: 10px; }
+  .sticky-sum.stuck .stat .lbl { font-size: 12px; margin-bottom: 3px; }
+  .sticky-sum.stuck .stat .val { font-size: 19px; }
+  .sticky-sum.stuck .stat.hero .val { font-size: 24px; }
+  .sticky-sum.stuck .stat .sub { max-height: 0; margin-top: 0; opacity: 0; }
+
+  .rank-head { margin-bottom: 12px; }
+  .rank-head h3 { font-size: var(--fs-lg); letter-spacing: var(--tr-lg); }
+  .rank-sub { font-size: var(--fs-2xs); color: var(--muted); margin-top: 4px; line-height: 1.55; }
+  .rank-sub .warn-text { color: var(--amber); font-weight: 600; }
+  td .pos { color: var(--green-dark); }
+  td .neg { color: var(--red); }
+
+  /* ═══════════ 표 ═══════════ */
+  .table-wrap { overflow-x: auto; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface); box-shadow: var(--sh-1); }
+  table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+  thead th {
+    background: var(--surface-2); color: var(--muted); font-size: var(--fs-2xs); font-weight: 600;
+    text-align: left; padding: 11px 14px; white-space: nowrap; border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 2;
+  }
+  th.num, td.num { text-align: right; }
+  th.center, td.center { text-align: center; }
+  tbody td { padding: 12px 14px; border-top: 1px solid var(--line-soft); white-space: nowrap; vertical-align: middle; }
+  tbody tr:first-child td { border-top: none; }
+  tbody td.cell-main { white-space: normal; line-height: 1.45; }
+  @media (hover: hover) { tbody tr:hover td { background: var(--surface-2); } }
+  .mini-btn {
+    height: 30px; padding: 0 11px; border: 1px solid var(--line); background: #fff; border-radius: 8px;
+    font-size: var(--fs-2xs); font-weight: 600; cursor: pointer; color: var(--text);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .mini-btn + .mini-btn { margin-left: 5px; }
+  .mini-btn.plus { color: var(--green-dark); border-color:#b6ddc6; }
+  .mini-btn.del { color: var(--red); border-color: #eec4c0; }
+  .empty-row td { text-align:center; color: var(--muted); padding: 38px 20px; white-space: normal; line-height: 1.6; }
+  .more-wrap { text-align: center; margin-top: 16px; }
+  tr.row-return > td { background: #fdf4f3; }
+  .dim { color: var(--muted); opacity: .65; }
+
+  /* 표식은 밑줄 한 겹으로. 채운 알약을 줄마다 깔면 표가 사탕 상자가 된다. */
+  .pill {
+    display:inline-block; padding: 2px 1px 3px; font-size: var(--fs-2xs); font-weight: 600;
+    white-space: nowrap; border-bottom: 2px solid currentColor; border-radius: 0;
+  }
+  .pill.cash { color: var(--green-dark); }
+  .pill.transfer { color: var(--blue); }
+  .pill.diff { color: var(--red); }
+  .pill.mute { color: var(--muted); border-bottom-color: var(--line); }
+  .pill.warn { color: var(--amber); }
+  .pill.split { color: var(--amber); }
+  .pill.out { color: var(--green-dark); }
+  .pill.in  { color: var(--amber); }
+  /* 매입 필요 — 알약을 밑에 달면 줄이 두 칸이 된다. 숫자 자체를 빨강으로 (2026-11-03) */
+  .stock-low { color: var(--red); }
+  .pay-lines { display: flex; flex-direction: column; gap: 3px; }
+  .pay-lines .pill { text-align: center; }
+
+  /* 절판 — 시트의 회색 칠한 줄과 같은 뜻이다. 지우는 게 아니라 물러나 있는 것이라
+     글자를 흐리게만 하고 줄은 그대로 둔다. 제목과 남은 재고는 읽혀야 하므로 너무 죽이지 않는다. */
+  tbody tr.dead-row { background: var(--surface-2); color: var(--muted); }
+  tbody tr.dead-row .cell-main b { font-weight: 500; color: var(--muted); }
+  tbody tr.dead-row .cat-badge { opacity: .5; }
+  .dead-tag { margin-left: 8px; vertical-align: middle; }
+
+  /* ═══════════ 리포트 ═══════════ */
+  .period { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
+  .period button {
+    padding: 0 15px; min-height: var(--pill-h); border: 1px solid var(--line); background: #fff;
+    border-radius: var(--r-pill); font-size: var(--fs-xs); font-weight: 600; cursor: pointer; color: var(--muted);
+  }
+  .period button.on { background: var(--ink-2); border-color: var(--ink-2); color: #fff; }
+  .period .custom { display: flex; align-items: center; gap: 6px; margin-left: 4px; }
+  .period .custom input {
+    padding: 8px 11px; border: 1px solid var(--line); border-radius: var(--r-sm); font-size: var(--fs-xs); background: #fff; color: inherit;
+  }
+  .period .custom span { color: var(--muted); font-size: var(--fs-xs); }
+
+  .chart-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 20px; box-shadow: var(--sh-1); margin-bottom: 20px; }
+  .chart-title { font-size: var(--fs-sm); font-weight: 600; margin-bottom: 3px; }
+  .chart-sub { font-size: var(--fs-2xs); color: var(--muted); margin-bottom: 18px; }
+  .chart { position: relative; }
+  .chart-plot {
+    display: flex; align-items: flex-end; gap: 2px; height: 170px;
+    border-bottom: 1px solid var(--line); padding-bottom: 0;
+  }
+  .chart-col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; cursor: default; position: relative; }
+  .chart-col .bar {
+    background: #9db8e8; border-radius: 4px 4px 0 0; min-height: 2px;
+    transition: background .12s;
+  }
+  .chart-col.peak .bar { background: var(--blue); }
+  @media (hover: hover) { .chart-col:hover .bar { background: var(--blue-dark); } }
+  .chart-col .peak-label {
+    position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 6px;
+    font-size: 12px; font-weight: 600; color: var(--blue-dark); white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .chart-x { display: flex; gap: 2px; margin-top: 8px; }
+  .chart-x span { flex: 1; min-width: 0; text-align: center; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+  .chart-tip {
+    position: absolute; pointer-events: none; opacity: 0; transition: opacity .12s;
+    background: var(--ink); color: #fff; font-size: var(--fs-2xs); font-weight: 600;
+    padding: 8px 12px; border-radius: 8px; white-space: nowrap; z-index: 5; transform: translate(-50%, -100%);
+    box-shadow: var(--sh-2); font-variant-numeric: tabular-nums;
+  }
+  .chart-tip.show { opacity: 1; }
+  .chart-tip .t-d { color: #a8b4c6; font-weight: 500; display: block; font-size: 12px; }
+  .chart-empty { height: 170px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: var(--fs-sm); }
+
+  /* ═══════════ Modal ═══════════ */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(16,22,32,.55); display: none;
+    align-items: center; justify-content: center; z-index: 100; padding: 16px;
+    overscroll-behavior: contain;
+  }
+  .overlay.show { display: flex; }
+  .modal {
+    background: var(--surface); border-radius: var(--r-lg); width: 420px; max-width: 100%;
+    max-height: calc(100dvh - 32px); overflow-y: auto; padding: 24px; box-shadow: var(--sh-3);
+  }
+  .modal.wide { width: 640px; }
+  .modal h3 { font-size: var(--fs-lg); margin-bottom: 15px; }
+  .modal p.desc { font-size: var(--fs-xs); color: var(--muted); margin-bottom: 15px; line-height: 1.65; }
+  .field { margin-bottom: 14px; }
+  .field label { display:block; font-size: var(--fs-2xs); color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+  .field input {
+    width: 100%; padding: 12px; border: 2px solid var(--line); border-radius: var(--r-sm); font-size: 16px;
+    background: #fff; color: inherit;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--blue); }
+  .field select {
+    width: 100%; padding: 12px; border: 2px solid var(--line); border-radius: var(--r-sm);
+    font-size: 16px; background: #fff; color: inherit; font-weight: 600;
+  }
+  .field textarea {
+    width: 100%; padding: 12px; border: 2px solid var(--line); border-radius: var(--r-sm);
+    font-size: var(--fs-xs); font-family: ui-monospace, Menlo, Consolas, monospace; resize: vertical;
+    line-height: 1.55; color: inherit; background: #fff;
+  }
+  .field textarea:focus { outline: none; border-color: var(--blue); }
+  .chkline {
+    display: flex; align-items: center; gap: 9px; padding: 8px 0;
+    font-size: var(--fs-xs); font-weight: 600; cursor: pointer;
+  }
+  .chkline input { width: 17px; height: 17px; accent-color: var(--blue); cursor: pointer; flex-shrink: 0; }
+  .field-row { display: flex; gap: 10px; }
+  .field-row .field { flex: 1; min-width: 0; }
+  .modal-actions { display:flex; gap: 8px; margin-top: 10px; }
+  .modal-actions .btn { flex: 1; min-height: 48px; font-size: var(--fs-md); }
+  .warn-box { background: var(--red-wash); border: 1px solid #eec4c0; border-radius: var(--r-sm); padding: 13px 15px; font-size: var(--fs-xs); color: #8c2921; line-height: 1.65; margin-bottom: 15px; }
+  .info-box { background: var(--blue-wash); border: 1px solid #c9dcf5; border-radius: var(--r-sm); padding: 13px 15px; font-size: var(--fs-xs); color: var(--blue-dark); line-height: 1.65; margin-bottom: 15px; }
+  /* 기록 수정 레이어 — 좁은 관리 칸에 단추를 늘어놓는 대신 한 겹 안으로 들인다.
+     줄 하나가 곧 할 일 하나고, 되돌릴 수 없는 일(삭제)만 맨 아래에서 붉게 선다. */
+  .act-head { padding: 0 2px 13px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+  .act-head .ah-when { font-size: var(--fs-2xs); color: var(--muted); }
+  .act-head .ah-what { font-size: var(--fs-sm); font-weight: 600; line-height: 1.5; margin-top: 4px; }
+  .act-head .ah-meta { font-size: var(--fs-xs); color: var(--muted); margin-top: 4px; }
+  .act-list { border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; }
+  .act-row {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    padding: 14px 15px; min-height: var(--tap); border: none; background: #fff;
+    border-bottom: 1px solid var(--line-soft); text-align: left; cursor: pointer;
+    color: var(--text); font-family: inherit; transition: background var(--press-out);
+  }
+  .act-row:last-child { border-bottom: none; }
+  .act-row:active { background: var(--surface-2); }
+  .act-ico { font-size: 17px; width: 22px; text-align: center; flex-shrink: 0; }
+  .act-body { flex: 1; min-width: 0; }
+  .act-name { display: block; font-size: var(--fs-sm); font-weight: 600; }
+  .act-sub { display: block; font-size: var(--fs-2xs); color: var(--muted); margin-top: 2px;
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .act-arrow { color: var(--muted); opacity: .5; font-size: 15px; flex-shrink: 0; }
+  .act-row.danger .act-name { color: var(--red); }
+  .act-row.danger:active { background: var(--red-wash); }
+  /* 관리 칸: 상태 표식은 단추 위에 한 줄로 얹는다 (표식은 '할 일' 이 아니라 '지금 상태') */
+  td.cell-manage .pill { display: block; margin-bottom: 5px; }
+  .ret-list { max-height: 290px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-sm); }
+  .ret-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 13px; border-bottom: 1px solid var(--line-soft); }
+  .ret-row:last-child { border-bottom: none; }
+  .ret-title { font-size: var(--fs-sm); font-weight: 600; line-height: 1.4; }
+  .ret-sub { font-size: var(--fs-2xs); color: var(--muted); margin-top: 3px; }
+  .ret-qty { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .ret-qty button { width: 34px; height: 34px; border: 1px solid var(--line); background: var(--gray); border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600; line-height: 1; color: var(--text); }
+  .ret-qty input { width: 52px; text-align: center; padding: 7px 4px; border: 2px solid var(--line); border-radius: 8px; font-size: var(--fs-md); font-weight: 600; }
+  .pick-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 13px; border-bottom: 1px solid var(--line-soft); }
+  .pick-row:last-child { border-bottom: none; }
+  .log-list { max-height: 350px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-sm); }
+  .log-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 11px 13px; border-bottom: 1px solid var(--line-soft); font-size: var(--fs-xs); }
+  .log-row:last-child { border-bottom: none; }
+  .log-when { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+  .log-delta { font-weight: 700; white-space: nowrap; }
+  .log-delta.up { color: var(--green-dark); }
+  .log-delta.down { color: var(--red); }
+  .log-delta.flat { color: var(--muted); }
+
+  /* ═══════════ Toast / 업데이트 배너 ═══════════ */
+  #toast {
+    position: fixed; bottom: calc(var(--bar-h) + var(--safe-b) + 18px); left: 50%;
+    transform: translateX(-50%) translateY(16px);
+    background: var(--ink); color: #fff; padding: 14px 24px; border-radius: var(--r-pill); font-size: var(--fs-md);
+    font-weight: 600; opacity: 0; transition: opacity .22s, transform .22s; z-index: 300; pointer-events: none;
+    box-shadow: var(--sh-3); max-width: calc(100vw - 32px); text-align: center;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.good { background: var(--green-dark); }
+  #toast.bad { background: var(--red); }
+  #updateBar {
+    display: none; align-items: center; justify-content: center; gap: 12px;
+    background: #ffcb45; color: #3d2d05; font-size: var(--fs-xs); font-weight: 600;
+    padding: 10px 14px; flex-shrink: 0;
+  }
+  #updateBar.show { display: flex; }
+  #updateBar button { border: none; background: #3d2d05; color: #ffcb45; border-radius: 7px; padding: 7px 14px; font-size: var(--fs-xs); font-weight: 600; cursor: pointer; --btn-edge: #241b03; }
+
+  /* ═══════════ 태블릿 / 휴대폰 ═══════════ */
+  @media (max-width: 899px) {
+    /* 폰에서 입력 글자가 16px 미만이면 iOS 가 화면을 확대해 버린다 — 책을 검색할 때마다 화면이 튄다 */
+    input, select, textarea, .search,
+    .filters input[type=date], .filters select, .period .custom input { font-size: 16px; }
+
+    .cats button, .period button { min-height: var(--tap); padding: 0 16px; }
+    .mini-btn { min-height: var(--tap); padding: 0 14px; }
+
+    body { height: 100dvh; }
+    /* padding 을 통째로 덮어쓰면 상태바 자리(safe-area)까지 지워져,
+       머리글이 상태바 쪽으로 올라붙고 탭 위에 빈 남색 띠가 남는다. 위쪽은 그대로 둔다. */
+    header {
+      padding-left: 12px; padding-right: 10px; padding-bottom: 0;
+      gap: 8px; height: calc(50px + env(safe-area-inset-top, 0px));
+    }
+    header .brand { font-size: var(--fs-md); }
+    header .brand span { display: none; }
+    header .info { gap: 8px; font-size: var(--fs-2xs); }
+    header .info .hide-sm { display: none; }
+    /* '실시간 연결됨' 다섯 글자가 톱니를 화면 밖으로 밀어낸다 — 폰에서는 초록 불빛만 남기고,
+       불빛을 누르면 무슨 상태인지 말해준다 */
+    .sync { background: none; border: none; padding: 8px 6px; gap: 0; }
+    .sync .sync-text { display: none; }
+    .sync .dot { width: 10px; height: 10px; box-shadow: 0 0 0 3px rgba(84,214,150,.18); }
+    .sync.warn .dot { box-shadow: 0 0 0 3px rgba(255,206,90,.20); }
+    .sync.off  .dot { box-shadow: 0 0 0 3px rgba(255,130,130,.20); }
+    .icon-btn { min-width: 36px; height: 32px; padding: 0 9px; }
+    #installBtn .lbl { display: none; }
+    .biz-chip { padding: 5px 10px; }
+    .tabs { overflow-x: auto; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tabs button { flex: 1 0 auto; padding: 12px 14px; font-size: var(--fs-xs); }
+
+    #pos.view.active { flex-direction: column; }
+    .product-pane { padding: 14px; padding-bottom: calc(var(--bar-h) + var(--safe-b) + 14px); }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 10px; }
+
+    /* 폰에서는 왼쪽 기둥을 세울 자리가 없다 — 아래에서 올라와 화면을 덮는 판이 된다 */
+    .cart-pane {
+      width: 100%; max-width: none; top: auto; max-height: 88dvh;
+      border-right: none; border-top: 1px solid var(--line);
+      border-radius: var(--r-lg) var(--r-lg) 0 0;
+      transform: translateY(calc(100% + 8px));
+      box-shadow: 0 -14px 44px rgba(12,20,40,.28);
+    }
+    .cart-pane.open { transform: translateY(0); }
+    .cart-head { border-radius: var(--r-lg) var(--r-lg) 0 0; }
+    .cart-items { max-height: 34dvh; }
+
+    .panel { padding: 14px; padding-bottom: calc(var(--bar-h) + var(--safe-b) + 14px); }
+    .panel-head h2 { font-size: var(--fs-lg); }
+    .cards { grid-template-columns: repeat(auto-fit, minmax(148px,1fr)); gap: 10px; }
+    .stat { padding: 13px 14px; }
+    .stat .val { font-size: 22px; }
+    .stat.hero .val { font-size: 27px; }
+
+    .mobile-bar { padding: 0 14px; }
+    .mobile-bar .mb-amt { font-size: 21px; }
+    .mobile-bar .mb-open { padding: 0 18px; }
+  }
+
+  @media (max-width: 620px) {
+    /* 분류 칩이 세 줄로 접히면 첫 화면에서 책이 두 줄밖에 안 보인다.
+       탭처럼 한 줄로 눕히고 옆으로 밀어 본다 — 스크롤 막대는 감춘다. */
+    .cats {
+      flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+      margin-left: -14px; margin-right: -14px; padding: 2px 14px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .cats::-webkit-scrollbar { display: none; }
+    .cats button { flex: 0 0 auto; }
+    .filters .count { margin-left: 0; width: 100%; }
+    .filters input[type=date] { flex: 1 1 42%; }
+    .filters select { flex: 1 1 100%; }
+    /* 기간 직접 지정은 날짜 두 칸 + 적용이라 한 줄에 안 들어간다.
+       접히지 않으면 '적용' 이 화면 밖으로 밀려 눌리지 않는다. */
+    .period .custom { flex-wrap: wrap; width: 100%; margin-left: 0; }
+    .period .custom input { flex: 1 1 40%; min-width: 0; }
+    .period .custom button { flex: 1 1 100%; min-height: var(--tap); }
+    .modal { padding: 18px; border-radius: var(--r-md); }
+    .modal-actions { position: sticky; bottom: 0; background: var(--surface);
+                     padding-top: 12px; margin-top: 12px; box-shadow: 0 -8px 12px -8px rgba(23,29,39,.18); }
+    .field-row { flex-wrap: wrap; }
+    .field-row .field { flex: 1 1 100%; }
+    .stat.hero { grid-column: span 2; }
+  }
+
+  /* 표 → 카드 (좁은 화면) */
+  @media (max-width: 780px) {
+    .table-wrap { border-radius: 0; overflow: visible; border: none; background: transparent; box-shadow: none; }
+    table { border: none; background: transparent; border-radius: 0; }
+    thead { display: none; }
+    tbody, tbody tr, tbody td { display: block; width: 100%; }
+    tbody tr {
+      background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+      margin-bottom: 10px; padding: 4px 0; box-shadow: var(--sh-1);
+    }
+    tbody tr:hover td { background: transparent; }
+    tbody tr:first-child td { border-top: none; }
+    tbody td {
+      border-top: none; display: flex; align-items: center; justify-content: space-between;
+      gap: 14px; padding: 9px 14px; text-align: right; white-space: normal;
+    }
+    tbody td + td { border-top: 1px solid var(--line-soft); }
+    tbody td::before {
+      content: attr(data-label); color: var(--muted); font-weight: 600; font-size: var(--fs-2xs);
+      text-align: left; flex: 0 0 auto; white-space: nowrap;
+    }
+    tbody td.cell-main { font-size: var(--fs-md); font-weight: 500; }
+    tbody td.cell-main::before { content: none; }
+    tbody td.cell-main { justify-content: flex-start; text-align: left; }
+    tbody td:empty { display: none; }
+    .empty-row td { display: block; text-align: center; }
+    .empty-row td::before { content: none; }
+    .mini-btn + .mini-btn { margin-left: 6px; }
+    tr.row-return > td { background: transparent; }
+    tr.row-return { border-color: #eec4c0; background: #fdf4f3; }
+  }
+
+  /* 손바닥만 한 폰 — '매출' 이라는 말은 떼도 숫자가 스스로 말한다. 톱니 자리를 먼저 지킨다. */
+  @media (max-width: 420px) {
+    header { padding-left: 10px; padding-right: 8px; gap: 7px; }
+    header .brand { font-size: var(--fs-sm); }
+    .hdr-rev .k { display: none; }
+    header .info { gap: 7px; }
+  }
+
+  /* 아주 좁은 화면 — 카드가 150px 남짓이라 배지 자리(62px)를 떼면 첫 줄에 글자가 안 남는다.
+     이때는 겹치지 말고 배지를 제목 위에 따로 올린다. 제목은 여전히 안 자른다. */
+  @media (max-width: 400px) {
+    .book-btn .bs { position: static; align-self: flex-end; }
+    .book-btn .bt::before { content: none; }
+    .book-btn { min-height: 104px; padding: 13px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 9px; }
+    .cards { grid-template-columns: 1fr 1fr; }
+    .stat.hero { grid-column: span 2; }
+    .cart-head, .cart-row { grid-template-columns: 1fr 72px 88px 38px; }
+    .cart-row { padding: 10px 12px; }
+    .summary, .pay-methods, .customer, .split-pay, .pay-actions { padding-left: 12px; padding-right: 12px; }
+    /* 버튼 셋이 한 줄에 서야 하므로 곁가지 둘은 한 단계 작게 — '결제 완료' 는 그대로 둔다 */
+    .pay-actions { gap: 6px; }
+    .pay-actions .clear, .pay-actions .hold { padding: 0 10px; font-size: var(--fs-sm); }
+    .mobile-bar { gap: 10px; padding: 0 12px; }
+    .mobile-bar .mb-amt { font-size: 19px; }
+    .mobile-bar .mb-open { padding: 0 15px; font-size: var(--fs-sm); }
+    .panel-head .actions { width: 100%; }
+    .panel-head .actions .btn { flex: 1; }
+  }
+
+  /* ═══════════ 바자회 POS 에서 더한 것 ═══════════ */
+  .cat-badge.c-straw  { color: var(--red); }
+  .cat-badge.c-banana { color: var(--amber); }
+  .cat-badge.c-tang   { color: #b8560c; }
+  .cat-badge.c-drink  { color: var(--green-dark); }
+  .cat-badge.c-etc    { color: var(--muted); }
+
+  .book-btn .bh { font-size: var(--fs-2xs); color: var(--amber); font-weight: 600; margin-top: 2px; }
+  .book-btn .bp.noprice { color: var(--red); font-size: var(--fs-xs); }
+
+  /* 예약 */
+  .avail-box { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+  .avail-chip {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+    padding: 10px 13px; box-shadow: var(--sh-1); min-width: 150px;
+  }
+  .avail-chip .t { font-size: var(--fs-xs); font-weight: 600; margin-bottom: 4px; }
+  .avail-chip .free { font-size: 21px; font-weight: 700; color: var(--green-dark); letter-spacing: -.02em; }
+  .avail-chip .free.short { color: var(--red); }
+  .avail-chip .nums { font-size: var(--fs-2xs); color: var(--muted); margin-top: 2px; }
+  .avail-none { color: var(--muted); font-size: var(--fs-xs); padding: 4px 0; }
+  .ord-no { font-size: var(--fs-2xs); color: var(--muted); font-weight: 600; }
+  .ord-name { font-weight: 600; }
+  .ord-items { font-size: var(--fs-xs); color: var(--muted); margin-top: 2px; }
+  .tog {
+    padding: 0 12px; min-height: 34px; border-radius: var(--r-pill); border: 1px solid var(--line);
+    background: var(--surface); font-size: var(--fs-2xs); font-weight: 600; cursor: pointer; color: var(--muted);
+    display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; font-family: inherit;
+  }
+  .tog.on { background: var(--green-wash); border-color: #bfe3cc; color: var(--green-dark); }
+  .tog.wait { background: var(--red-wash); border-color: #f0c0c0; color: var(--red); }
+  .tog.go { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+  /* 시트 대조 결과 */
+  .verify-box { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 12px 14px; margin: 10px 0;
+                font-size: var(--fs-xs); line-height: 1.6; background: var(--surface-2); }
+  .verify-box.ok { border-color: #bfe3cc; background: var(--green-wash); color: var(--green-dark); }
+  .verify-box.bad { border-color: #f0c0c0; background: var(--red-wash); color: var(--red); }
+  .verify-box .list { max-height: 150px; overflow: auto; margin-top: 6px; color: var(--text); font-size: var(--fs-2xs); }
+  .set-sec { border-top: 1px solid var(--line-soft); padding-top: 14px; margin-top: 14px; }
+  .set-sec h4 { font-size: var(--fs-sm); margin-bottom: 8px; }
+  .set-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set-btns .btn { flex: 1 1 auto; }
+
+  /* Firebase 연결 전 안내 */
+  #setupScreen { position: fixed; inset: 0; z-index: 400; display: none; align-items: center; justify-content: center;
+                 background: var(--bg); padding: 20px; }
+  #setupScreen .login-card { max-width: 460px; text-align: left; }
+  #setupScreen ol { margin: 10px 0 0 20px; line-height: 1.8; font-size: var(--fs-xs); }
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">🍓 바자회 POS <span>11.8</span></div>
+  <div class="info">
+    <div class="hide-sm">영업일자 <b id="today"></b> <b id="clock" class="clock"></b></div>
+    <div class="hdr-rev"><span class="k">매출</span> <b id="hdrRevenue">0원</b></div>
+    <button id="bizChip" class="biz-chip off" title="개업 · 마감">–</button>
+    <button id="sheetChip" class="sheet-chip" style="display:none"></button>
+    <div id="syncBadge" class="sync" role="status" tabindex="0"><span class="dot"></span><span id="syncText" class="sync-text">연결 중…</span></div>
+    <button id="settingsBtn" class="icon-btn" title="설정 · 시트 · 백업">⚙</button>
+  </div>
+</header>
+
+<div id="updateBar">
+  <span>새 버전이 준비됐어요.</span>
+  <button id="updateNow">지금 적용</button>
+</div>
+
+<div id="setupScreen">
+  <div class="login-card">
+    <div class="login-brand">🍓 바자회 POS</div>
+    <p class="login-sub">아직 Firebase 가 연결되지 않았습니다.</p>
+    <ol>
+      <li><code>SETUP-firebase.md</code> 를 따라 Firebase 프로젝트를 만드세요.</li>
+      <li><code>firebase-config.js</code> 에 config 값과 공용 계정 이메일을 넣으세요.</li>
+      <li><code>firestore.rules</code> 를 Firebase 콘솔에 게시하세요.</li>
+    </ol>
+  </div>
+</div>
+
+<div id="loginScreen">
+  <form id="loginForm" class="login-card">
+    <div class="login-brand">🍓 바자회 POS</div>
+    <p class="login-sub">공용 계정으로 로그인하세요</p>
+    <input id="loginEmail" type="email" placeholder="이메일" autocomplete="username" required>
+    <input id="loginPw" type="password" placeholder="비밀번호" autocomplete="current-password" required>
+    <button type="submit" id="loginBtn">로그인</button>
+    <div id="loginError" class="login-err"></div>
+  </form>
+</div>
+
+<div id="bizScreen">
+  <div class="biz-card">
+    <div class="biz-icon">🔒</div>
+    <h2>아직 개업 전입니다</h2>
+    <p class="biz-sub">개업해야 판매 · 반품 · 예약 수령을 할 수 있습니다.<br>예약 받기 · 재고 · 매출 조회는 그냥 하셔도 됩니다.</p>
+    <div id="bizLast" class="biz-last"></div>
+    <button class="btn primary" id="bizOpenBtn">🔓 개업하기</button>
+    <button class="btn ghost" id="bizPeekBtn">닫고 둘러보기</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="active" data-view="pos">🛒 판매</button>
+  <button data-view="preorder">📋 예약</button>
+  <button data-view="inventory">📦 재고</button>
+  <button data-view="sales">📊 매출 내역</button>
+  <button data-view="report">📈 리포트</button>
+</div>
+
+<main>
+  <!-- ============ 판매 ============ -->
+  <section class="view active" id="pos">
+    <div class="cart-pane" id="cartPane">
+      <div class="cart-head">
+        <span>상품명</span><span>수량</span><span>금액</span><span></span>
+        <button class="sheet-close" id="sheetClose" aria-label="장바구니 닫기">✕</button>
+      </div>
+      <div class="cart-items" id="cartItems"></div>
+
+      <div class="summary">
+        <div class="sum-row"><span class="k">총 수량</span><span id="sumQty">0개</span></div>
+        <div class="sum-row"><span class="k">합계 금액 (정가)</span><span id="sumTotal">0원</span></div>
+        <div class="sum-row disc"><span class="k">할인</span>
+          <span class="disc-input">
+            <span class="disc-toggle">
+              <button type="button" id="discModeAmt" class="on">원</button>
+              <button type="button" id="discModePct">%</button>
+            </span>
+            <input id="discount" type="text" inputmode="numeric" placeholder="0">
+            <em id="discUnit">원</em>
+          </span>
+        </div>
+        <div class="sum-row disc-calc"><span></span><span id="discCalc"></span></div>
+        <div class="sum-row total"><span>받을 금액</span><span id="sumPayable">0원</span></div>
+      </div>
+
+      <div class="pay-methods">
+        <button data-method="계좌이체" class="sel">💳 계좌이체</button>
+        <button data-method="현금">💵 현금</button>
+        <button data-method="분할">🧾 분할결제</button>
+      </div>
+
+      <div class="split-pay hide" id="splitWrap">
+        <div class="sp-row">
+          <span class="sp-k">💵 현금</span>
+          <span><input id="splitCash" type="text" inputmode="numeric" placeholder="0"><em>원</em></span>
+        </div>
+        <div class="sp-row">
+          <span class="sp-k">💳 계좌이체 <span class="dim">(자동)</span></span>
+          <span class="sp-v" id="splitTransfer">0원</span>
+        </div>
+        <div class="sp-hint" id="splitHint">현금으로 받은 금액을 적으면 나머지가 계좌이체로 잡힙니다.</div>
+      </div>
+
+      <div class="customer hide" id="discLabelWrap">
+        <label id="discLabelText">할인 사유 (선택 · 시트 비고 칸에 적힙니다)</label>
+        <input id="discLabel" type="text" placeholder="예) 봉사자 할인, 묶음 할인" autocomplete="off" enterkeyhint="done">
+      </div>
+
+      <div class="customer" id="customerWrap">
+        <label id="customerLabel">입금자명 (선택)</label>
+        <input id="customer" type="text" placeholder="예) 홍길동" autocomplete="off" enterkeyhint="done">
+      </div>
+
+      <div class="pay-actions">
+        <button class="clear" id="clearCart">비우기</button>
+        <button class="checkout" id="checkout" disabled>결제 완료</button>
+      </div>
+    </div>
+
+    <div class="product-pane">
+      <div class="product-head">
+        <input id="qProducts" class="search" type="search" placeholder="🔍 상품 찾기" style="flex:1;max-width:340px">
+        <button class="btn danger" id="posReturnBtn">↩ 반품하기</button>
+      </div>
+      <div class="cats" id="posCats"></div>
+      <div class="grid" id="productGrid"></div>
+    </div>
+  </section>
+
+  <!-- ============ 예약 ============ -->
+  <section class="view" id="preorder">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>📋 예약 주문</h2>
+        <div class="actions">
+          <button class="btn ghost" id="orderCsvBtn">⬇ 예약 CSV</button>
+          <button class="btn green" id="addOrderBtn">＋ 예약 받기</button>
+        </div>
+      </div>
+      <div class="cards">
+        <div class="stat"><div class="lbl">예약 건수</div><div class="val" id="oCount">0건</div></div>
+        <div class="stat"><div class="lbl">예약 수량</div><div class="val" id="oQty">0개</div></div>
+        <div class="stat"><div class="lbl">수령 대기</div><div class="val" id="oWaiting">0개</div></div>
+        <div class="stat"><div class="lbl">입금 완료 (대기 중)</div><div class="val green" id="oPaid">0원</div></div>
+        <div class="stat"><div class="lbl">미입금 (대기 중)</div><div class="val red" id="oUnpaid">0원</div></div>
+      </div>
+      <div class="chart-title" style="margin-bottom:8px">현장 판매 가능 수량 <span class="dim" style="font-weight:500">(재고 − 아직 안 가져간 예약)</span></div>
+      <div class="avail-box" id="availBox"></div>
+      <div class="filters" id="orderFilters">
+        <input id="qOrders" class="search" type="search" placeholder="🔍 성함 · 연락처 · 상품 · 번호로 찾기">
+        <label class="chk"><input type="checkbox" id="onlyUnpaid"> 미입금만</label>
+        <label class="chk"><input type="checkbox" id="onlyWaiting"> 수령 대기만</label>
+        <span class="count" id="orderCount"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>성함</th><th>주문 내역</th><th class="num">수량</th><th class="num">금액</th>
+            <th class="center">입금</th><th class="center">수령</th><th class="center">관리</th>
+          </tr></thead>
+          <tbody id="orderBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 재고 ============ -->
+  <section class="view" id="inventory">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>📦 재고 관리</h2>
+        <div class="actions">
+          <button class="btn ghost" id="allLogsBtn">🧾 변동 이력</button>
+          <button class="btn green" id="addProductBtn">＋ 새 상품 등록</button>
+        </div>
+      </div>
+      <div class="cards">
+        <div class="stat"><div class="lbl">상품 종류</div><div class="val" id="statKinds">0</div></div>
+        <div class="stat"><div class="lbl">총 재고</div><div class="val" id="statStock">0개</div></div>
+        <div class="stat"><div class="lbl">예약 보관</div><div class="val" id="statHeld">0개</div></div>
+        <div class="stat"><div class="lbl">가격 미정</div><div class="val red" id="statNoPrice">0종</div></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>상품</th><th class="num">판매가</th><th class="num">재고</th><th class="num">예약 보관</th>
+            <th class="num">현장 판매 가능</th><th class="num">판매</th><th class="center">관리</th>
+          </tr></thead>
+          <tbody id="invBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 매출 내역 ============ -->
+  <section class="view" id="sales">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>📊 매출 내역</h2>
+        <div class="actions">
+          <button class="btn ghost" id="exportCsv">⬇ 지금 보이는 목록 CSV</button>
+        </div>
+      </div>
+      <div class="filters" id="salesFilters">
+        <input id="qSales" class="search" type="search" placeholder="🔍 상품 · 고객으로 찾기">
+        <input type="date" id="fFrom" title="시작일"><span class="sep">~</span><input type="date" id="fTo" title="종료일">
+        <select id="fMethod">
+          <option value="">결제수단 전체</option>
+          <option value="현금">현금</option>
+          <option value="계좌이체">계좌이체</option>
+          <option value="분할">분할결제</option>
+        </select>
+        <select id="fType">
+          <option value="">판매+반품</option>
+          <option value="sale">판매만</option>
+          <option value="preorder">예약 수령만</option>
+          <option value="return">반품만</option>
+        </select>
+        <button class="btn ghost" id="fClear">초기화</button>
+        <span class="count" id="salesCount"></span>
+      </div>
+      <div class="cards" id="salesCards"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>일시</th><th>상품</th><th class="num">수량</th><th class="num">금액</th>
+            <th class="center">결제</th><th>고객</th><th class="center">관리</th>
+          </tr></thead>
+          <tbody id="salesBody"></tbody>
+        </table>
+      </div>
+      <div class="more-wrap"><button class="btn ghost" id="salesMore" style="display:none">더 보기</button></div>
+    </div>
+  </section>
+
+  <!-- ============ 리포트 ============ -->
+  <section class="view" id="report">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>📈 리포트</h2>
+        <div class="actions">
+          <button class="btn ghost" id="exportPeriodCsv">⬇ 이 기간 CSV</button>
+        </div>
+      </div>
+      <div class="period" id="periodBar">
+        <button data-p="session" class="on">이번 영업</button>
+        <button data-p="today">오늘</button>
+        <button data-p="all">전체</button>
+        <span class="custom">
+          <input type="date" id="pFrom"><span>~</span><input type="date" id="pTo">
+          <button data-p="custom">적용</button>
+        </span>
+      </div>
+      <div class="cards" id="reportSum">
+        <div class="stat hero"><div class="lbl" id="rLabel">매출</div><div class="val green" id="rRevenue">0원</div></div>
+        <div class="stat"><div class="lbl">💵 현금</div><div class="val" id="rCash">0원</div></div>
+        <div class="stat"><div class="lbl">💳 계좌이체</div><div class="val" id="rTransfer">0원</div></div>
+        <div class="stat"><div class="lbl">판매 개수 (반품 차감)</div><div class="val" id="rQty">0개</div></div>
+        <div class="stat"><div class="lbl">판매 건수</div><div class="val" id="rCount">0건</div></div>
+        <div class="stat"><div class="lbl">할인 합계</div><div class="val red" id="rDisc">0원</div></div>
+        <div class="stat"><div class="lbl">반품 금액</div><div class="val red" id="rRefund">0원</div></div>
+      </div>
+      <div class="rank-head">
+        <h3>상품별</h3>
+        <p class="rank-sub">시트 '판매기록' 과 같은 계산입니다 (할인은 품목에 나눠 뺀 실제 받은 돈).</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>상품</th><th class="num">판매</th><th class="num">반품</th><th class="num">순 개수</th>
+            <th class="num">할인</th><th class="num">매출</th>
+          </tr></thead>
+          <tbody id="rankBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="mobile-bar" id="mobileBar">
+  <div class="mb-sum">
+    <div class="mb-qty" id="mbQty">담긴 상품 없음</div>
+    <div class="mb-amt" id="mbAmt">0원</div>
+  </div>
+  <button class="mb-open" id="mbOpen" disabled>장바구니</button>
+</div>
+<div class="sheet-backdrop" id="sheetBackdrop"></div>
+
+<div class="overlay" id="overlay">
+  <div class="modal" id="modal"></div>
+</div>
+
+<input type="file" id="restoreFile" accept="application/json,.json" style="display:none">
+<div id="toast"></div>
+
+<script type="module">
+/* ═════════════════════════════════════════════════════════════════
+   바자회 POS — 서적부 POS · 사업팀 POS 를 바탕으로 바자회(2026-11-08)용으로 다시 짠 것.
+
+   원칙 (서적부에서 겪은 일에서 나온 것들)
+   1. 어떤 기록도 판매를 막지 못한다 — 재고·매출 저장, 원장 쓰기, 시트 전송은 서로 떨어져 있다.
+   2. 시트로 가는 줄은 ledger.js 한 곳에서만 만든다. 시험(tests/run.mjs)도 같은 파일을 쓴다.
+   3. 못 보낸 기록은 Firestore sheetQueue 한 곳에 쌓고, 켜진 기기 아무 데서나 보낸다.
+   4. 시트가 정말 맞는지는 '시트 대조' 가 앱 기록과 한 칸씩 비교해 확인하고, 다르면 고친다.
+   ═════════════════════════════════════════════════════════════════ */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, doc, updateDoc, deleteDoc, getDoc, getDocs, setDoc,
+  onSnapshot, query, writeBatch, increment, arrayUnion, runTransaction }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig, STORE_EMAIL } from "./firebase-config.js";
+import * as L from "./ledger.js";
+
+const $ = id => document.getElementById(id);
+const CONFIGURED = !!(firebaseConfig && firebaseConfig.apiKey && !/여기에|YOUR_/.test(firebaseConfig.apiKey));
+
+let app, auth, db, productsCol, txCol, ordersCol, logsCol, qCol;
+if (CONFIGURED) {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  productsCol = collection(db, 'products');
+  txCol = collection(db, 'transactions');
+  ordersCol = collection(db, 'preorders');
+  logsCol = collection(db, 'stockLogs');
+  qCol = collection(db, 'sheetQueue');
+}
+
+/* ================= 처음 등록되는 상품 =================
+   가격은 아직 미정이라 0원으로 둔다 — 0원 상품은 판매·예약 때 막히고 재고 화면에 '가격 미정' 으로 뜬다.
+   재고는 예상 수량으로 넣고, 그 수량은 시트에도 '입고' 줄로 남는다.
+   실제 만든 수량이 다르면 재고 화면의 '재고 수정' 으로 맞추면 '재고조정' 줄이 따라간다.
+   녹차 음료는 정해지면 '＋ 새 상품 등록' 으로 넣는다 (분류: 음료). */
+const SEED_PRODUCTS = [
+  { id: 'p1', name: '딸기 요거트',     category: '딸기',   stock: 12 },
+  { id: 'p2', name: '딸기 녹차초코',   category: '딸기',   stock: 11 },
+  { id: 'p3', name: '바나나 다크초코', category: '바나나', stock: 12 },
+  { id: 'p4', name: '바나나 녹차초코', category: '바나나', stock: 12 },
+  { id: 'p5', name: '귤 요거트',       category: '귤',     stock: 11 },
+  { id: 'p6', name: '귤 화이트초코',   category: '귤',     stock: 12 },
+];
+const CATS = ['딸기', '바나나', '귤', '음료', '기타'];
+const CAT_SLUG = { 딸기: 'c-straw', 바나나: 'c-banana', 귤: 'c-tang', 음료: 'c-drink', 기타: 'c-etc' };
+
+/* ================= 상태 ================= */
+let products = [], transactions = [], preorders = [], stockLogs = [];
+let cart = [];                 // { id, qty }
+let payMethod = '계좌이체';
+let session = null, sessionLoaded = false, closings = [];
+
+const won = n => (n || 0).toLocaleString('ko-KR') + '원';
+const fmt = n => (n || 0).toLocaleString('ko-KR');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const digits = v => String(v ?? '').replace(/[^\d]/g, '');
+const sum = a => a.reduce((s, x) => s + x, 0);
+const nameKey = s => String(s ?? '').trim().toLowerCase().replace(/\s+/g, '');
+const productById = id => products.find(p => p.id === id);
+const catOf = p => CATS.includes(p?.category) ? p.category : '기타';
+const catBadge = p => `<span class="cat-badge ${CAT_SLUG[catOf(p)]}">${catOf(p)}</span>`;
+const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'ko');
+const p2 = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+const fmtDateTime = iso => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} ${p2(d.getHours())}:${p2(d.getMinutes())}`; };
+const me = () => (auth && auth.currentUser ? auth.currentUser.email : null);
+const moneyInput = el => el.addEventListener('input', () => {
+  const v = digits(el.value);
+  el.value = v === '' ? '' : parseInt(v, 10).toLocaleString('ko-KR');
+});
+const moneyOf = el => { const v = digits(el && el.value); return v === '' ? 0 : parseInt(v, 10); };
+
+/* 품목이 어느 상품인지 — id 가 있으면 id, 옛 기록이면 이름으로 */
+const productOfItem = i => (i.bookId && productById(i.bookId)) || products.find(p => nameKey(p.name) === nameKey(i.title));
+
+/* ---------- 예약이 잡아 둔 수량 ----------
+   재고(stock)는 언제나 '실제로 있는 개수'다. 예약을 받아도 줄이지 않는다.
+   대신 아직 안 가져간 예약 수량을 빼서 '현장 판매 가능' 을 구하고, 판매 화면은 그만큼만 담게 한다.
+   (수령 처리할 때 비로소 재고가 줄고 매출이 잡힌다) */
+function reservedMap() {
+  const m = new Map();
+  preorders.forEach(o => {
+    if (o.handed) return;
+    (o.items || []).forEach(i => {
+      const p = productOfItem(i);
+      if (p) m.set(p.id, (m.get(p.id) || 0) + (i.qty || 0));
+    });
+  });
+  return m;
+}
+const heldOf = (p, res) => (res || reservedMap()).get(p.id) || 0;
+const freeOf = (p, res) => (p.stock || 0) - heldOf(p, res);
+
+/* ================= 연결 상태 ================= */
+const syncMeta = { products: { cache: true, pending: 0 }, tx: { cache: true, pending: 0 } };
+let wasOffline = false;
+function renderSync() {
+  const badge = $('syncBadge'), text = $('syncText');
+  const pending = syncMeta.products.pending + syncMeta.tx.pending;
+  const offline = !navigator.onLine || (syncMeta.products.cache && syncMeta.tx.cache);
+  badge.className = 'sync';
+  if (offline) { badge.classList.add('off'); text.textContent = pending ? `오프라인 · ${pending}건 대기` : '오프라인'; }
+  else if (pending) { badge.classList.add('warn'); text.textContent = `저장 중 ${pending}건`; }
+  else text.textContent = '실시간 연결됨';
+  badge.title = text.textContent;
+  if (offline && !wasOffline && auth && auth.currentUser) {
+    wasOffline = true;
+    toast('인터넷이 끊겼습니다. 판매는 기기에 저장되고 연결되면 자동으로 올라갑니다.', 'bad');
+  } else if (!offline && wasOffline && !pending) {
+    wasOffline = false;
+    toast('다시 연결되어 모두 저장되었습니다.', 'good');
+  }
+}
+window.addEventListener('online', renderSync);
+window.addEventListener('offline', renderSync);
+$('syncBadge').addEventListener('click', () => toast($('syncText').textContent));
+const readMeta = snap => ({ cache: snap.metadata.fromCache, pending: snap.docs.filter(d => d.metadata.hasPendingWrites).length });
+
+/* ================= 실시간 리스너 ================= */
+let listenersStarted = false;
+function startListeners() {
+  if (listenersStarted) return;
+  listenersStarted = true;
+  onSnapshot(query(productsCol), { includeMetadataChanges: true }, snap => {
+    products = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || byName(a, b));
+    syncMeta.products = readMeta(snap);
+    renderSync(); renderAll();
+  }, e => console.error('products', e));
+  onSnapshot(query(txCol), { includeMetadataChanges: true }, snap => {
+    transactions = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.time).localeCompare(String(a.time)));
+    syncMeta.tx = readMeta(snap);
+    renderSync(); renderAll();
+  }, e => console.error('transactions', e));
+  onSnapshot(query(ordersCol), snap => {
+    preorders = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.no || 0) - (b.no || 0));
+    renderAll();
+  }, e => console.error('preorders', e));
+  onSnapshot(query(logsCol), snap => {
+    stockLogs = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.time).localeCompare(String(a.time)));
+  }, e => console.error('stockLogs', e));
+  onSnapshot(doc(db, 'meta', 'session'), snap => {
+    session = snap.exists() ? snap.data() : null;
+    sessionLoaded = true;
+    renderBiz(); renderAll(); tickClock();
+  }, e => console.error('session', e));
+  onSnapshot(doc(db, 'meta', 'closings'), snap => {
+    closings = (snap.exists() && snap.data().list) || [];
+    renderBiz();
+  }, e => console.error('closings', e));
+}
+
+/* 처음 한 번만 상품을 넣는다. id 를 정해 두어서 두 기기가 동시에 해도 겹치지 않는다. */
+async function seedIfNeeded() {
+  try {
+    const metaRef = doc(db, 'meta', 'init');
+    const seeded = await runTransaction(db, async tr => {
+      const m = await tr.get(metaRef);
+      if (m.exists()) return false;
+      tr.set(metaRef, { seeded: true, at: new Date().toISOString() });
+      return true;
+    });
+    if (!seeded) return;
+    const batch = writeBatch(db);
+    const now = Date.now();
+    const time = new Date().toISOString();
+    const ops = [];
+    SEED_PRODUCTS.forEach((s, i) => {
+      batch.set(doc(productsCol, s.id), { name: s.name, category: s.category, price: 0, stock: s.stock, sold: 0, createdAt: now + i });
+      const logId = 'seed-' + s.id;
+      const rec = L.stockRecord({ title: s.name, qty: s.stock, kind: L.KIND.IN, note: '예상 수량 (처음 등록)', time });
+      batch.set(doc(logsCol, logId), logEntry({ bookId: s.id, title: s.name, reason: '등록', before: 0, after: s.stock,
+        note: '예상 수량 (처음 등록)', time, sheetKey: 'stock:' + logId, sheetRec: rec }));
+      ops.push({ key: 'stock:' + logId, op: 'rows', records: [rec] });
+    });
+    await batch.commit();
+    ops.forEach(queueOp);
+  } catch (e) { console.error('처음 상품 등록 실패', e); }
+}
+
+/* ================= 재고 원장 =================
+   재고 · 가격이 바뀌는 모든 순간을 stockLogs 에 남긴다. 시트로 간 줄은 sheetKey · sheetRec 을 같이 들고 있어
+   '시트 대조' 가 정답표를 만들 수 있다. 원장은 고쳐 쓰지 않는다 — 무를 때는 voidKey 를 든 줄을 새로 쓴다. */
+function logEntry({ bookId, title, reason, before = null, after = null, txId = null, note = null, time = null,
+                    sheetKey = null, sheetRec = null, voidKey = null }) {
+  const n = v => (typeof v === 'number' && isFinite(v)) ? v : null;
+  const e = { time: time || new Date().toISOString(), bookId: bookId || null, title: title || '', reason,
+              before: n(before), after: n(after), delta: (n(before) !== null && n(after) !== null) ? after - before : null,
+              txId, note, by: me() };
+  if (sheetKey) { e.sheetKey = sheetKey; e.sheetRec = sheetRec; }
+  if (voidKey) e.voidKey = voidKey;
+  return e;
+}
+/* 원장 쓰기는 판매와 떨어진 별도 쓰기 — 실패해도 판매는 이미 끝난 것이다 */
+function writeLogs(entries) {
+  if (!entries.length) return;
+  const batch = writeBatch(db);
+  entries.forEach(e => batch.set(doc(logsCol), logEntry(e)));
+  batch.commit().catch(e => console.error('원장 기록 실패(판매는 정상)', e));
+}
+/* 시트로 가는 재고 변동(입고 · 재고조정)은 원장 줄과 시트 줄이 한 몸이라 batch 안에 같이 넣는다 */
+function stockMove(batch, { product, kind, qty, note, before, after, reason }) {
+  const time = new Date().toISOString();
+  const ref = doc(logsCol);
+  const rec = L.stockRecord({ title: product.name, qty, kind, note, time });
+  const key = 'stock:' + ref.id;
+  batch.set(ref, logEntry({ bookId: product.id, title: product.name, reason, before, after, note, time, sheetKey: key, sheetRec: rec }));
+  return { key, op: 'rows', records: [rec] };
+}
+
+/* ═════════════════════════ 구글 시트 ═════════════════════════
+   큐 한 칸 = 시트에 할 일 하나 (op). 키가 같은 일은 두 번 넣지 않고, 시트도 같은 키를 두 번 적지 않는다.
+     rows      판매 · 반품 · 입고 · 재고조정 줄 쓰기          key = tx:<id> · stock:<logId>
+     delete    그 기록ID 줄 지우기                          key = del:<target>
+     replace   그 기록ID 줄을 지우고 다시 쓰기 (대조 후 고치기) key = fix:<target>:<시각>
+     order     예약 한 줄 넣기/고치기 (rev 가 클수록 새것)     key = order:<id>:<rev>
+     orderdel  예약 줄 지우기                               key = orderdel:<id>
+     rename    상품 이름 바꾸기                              key = rename:<시각>
+   보내는 순서는 넣은 순서(at). 시트는 하나씩 적용하고 하나씩 결과를 돌려준다. */
+let sheetCfg = null;
+let qRemote = new Map();
+let qSeen = false, qStarted = false, qSeq = 0, qEpoch = 0;
+const FLUSH_OWNER = Math.random().toString(36).slice(2, 10);
+const qDocId = key => String(key).replace(/\//g, '_');
+const sheetQueue = () => [...qRemote.values()].sort((a, b) => (a.at || 0) - (b.at || 0));
+
+function queueOp(op) {
+  if (!db) return;
+  if (qRemote.has(op.key)) return;
+  const it = JSON.parse(JSON.stringify({ ...op, at: Date.now() + (qSeq++ % 1000) / 1000, by: me() }));
+  qRemote.set(it.key, it);
+  qEpoch++;
+  setDoc(doc(qCol, qDocId(it.key)), it).catch(e => {
+    console.error('시트 큐에 못 넣음', e);
+    toast('⚠ 시트로 보낼 기록을 저장하지 못했습니다 — firestore.rules 게시를 확인하세요.', 'bad');
+  });
+  renderSheetBadge();
+  setTimeout(flushSheet, 50);
+}
+function dropQ(keys) {
+  return Promise.all(keys.map(k => {
+    qRemote.delete(k);
+    return deleteDoc(doc(qCol, qDocId(k))).catch(e => console.error('큐에서 못 지움', k, e));
+  }));
+}
+function startSheetQueue() {
+  if (qStarted) return;
+  qStarted = true;
+  onSnapshot(qCol, snap => {
+    const m = new Map();
+    snap.docs.forEach(d => { const x = d.data(); if (x && x.key) m.set(x.key, x); });
+    qRemote = m;
+    qSeen = true;
+    qEpoch++;
+    renderSheetBadge();
+    flushSheet();
+  }, err => { console.error('시트 큐를 못 읽음 — firestore.rules 게시 확인', err); renderSheetBadge(); });
+}
+
+/* 예약 한 줄 — 바뀔 때마다 지금 모습 전체를 보낸다. rev 는 시각이라 늦게 도착한 옛 모습은 시트가 버린다. */
+let revSeq = 0;
+function queueOrder(o) {
+  const rev = Date.now() * 100 + (revSeq++ % 100);
+  queueOp({ key: `order:${o.id}:${rev}`, op: 'order', id: o.id, rev, record: L.orderRecord(o) });
+}
+
+/* Code.gs 를 고치면 ledger.js 의 MIRROR_VERSION 과 같이 올린다 — 다르면 설정에 경고가 뜬다 */
+let sheetVersion = null;
+async function sheetPost(body, ms = 45000) {
+  if (!sheetCfg || !sheetCfg.url) throw new Error('시트 연동이 설정되지 않았습니다.');
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms);
+  try {
+    // text/plain 이어야 미리 묻기(OPTIONS)가 안 생긴다 — Apps Script 는 그걸 못 받는다
+    const res = await fetch(sheetCfg.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ token: sheetCfg.token || '', ...body }), signal: ctl.signal });
+    const out = await res.json();
+    if (out.version) sheetVersion = out.version;
+    if (!out.ok) throw new Error(out.error || '시트가 거절했습니다.');
+    return out;
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('시트 응답이 너무 늦습니다.');
+    if (e instanceof TypeError) throw new Error('시트에 연결하지 못했습니다 (주소 · 배포 · 인터넷 확인).');
+    throw e;
+  } finally { clearTimeout(timer); }
+}
+const sheetStale = () => !!sheetVersion && sheetVersion !== L.MIRROR_VERSION;
+
+async function loadSheetCfg() {
+  try {
+    const snap = await getDoc(doc(db, 'meta', 'sheet'));
+    sheetCfg = snap.exists() ? snap.data() : null;
+  } catch (e) { console.error('시트 설정 읽기 실패', e); sheetCfg = null; }
+  startSheetQueue();
+  renderSheetBadge();
+  if (sheetCfg && sheetCfg.url) sheetPost({ action: 'ping' }).then(renderSheetBadge).catch(() => {});
+  setTimeout(() => verifySheet({ quiet: true }), 15000);
+}
+
+/* 여러 기기가 같은 큐를 동시에 보내지 않게 잡는 잠금 (90초면 저절로 풀린다) */
+const LEASE_MS = 90000;
+const leaseRef = () => doc(db, 'meta', 'sheetFlush');
+const takeLease = () => runTransaction(db, async tr => {
+  const s = await tr.get(leaseRef());
+  const d = s.exists() ? s.data() : {};
+  const now = Date.now();
+  if (d.owner && d.owner !== FLUSH_OWNER && d.until > now && d.until - now <= LEASE_MS * 2) return false;
+  tr.set(leaseRef(), { owner: FLUSH_OWNER, until: now + LEASE_MS });
+  return true;
+});
+const releaseLease = () => runTransaction(db, async tr => {
+  const s = await tr.get(leaseRef());
+  if (s.exists() && s.data().owner === FLUSH_OWNER) tr.set(leaseRef(), { owner: null, until: 0 });
+}).catch(e => console.error('잠금 못 풂 (90초 뒤 저절로 풀림)', e));
+
+let flushing = false, sheetLastError = null;
+async function flushSheet(loud = false) {
+  const q0 = sheetQueue();
+  if (loud && !q0.length) { toast('보낼 것이 없습니다.', 'good'); return; }
+  if (flushing || !q0.length) return;
+  if (!sheetCfg || !sheetCfg.url) { if (loud) toast('시트 연동이 설정되지 않았습니다.', 'bad'); return; }
+  if (!navigator.onLine) { if (loud) toast('오프라인입니다. 연결되면 자동으로 보냅니다.', 'bad'); return; }
+  flushing = true;
+  let leased = false, more = false, sentAny = false;
+  try {
+    leased = await takeLease();
+    if (!leased) { if (loud) toast('다른 기기가 지금 보내는 중입니다.', 'good'); return; }
+    // 거절됐던 것은 맨 뒤로 — 그 몇 건이 다른 기록을 막지 않게
+    const all = sheetQueue();
+    const sending = [...all.filter(x => !x.err), ...all.filter(x => x.err)].slice(0, 40);
+    const out = await sheetPost({ action: 'ops', ops: sending.map(({ at, by, err, errAt, ...op }) => op) });
+    const done = [];
+    (out.results || []).forEach(r => {
+      if (r.ok) done.push(r.key);
+      else updateDoc(doc(qCol, qDocId(r.key)), { err: r.error || '시트가 거절', errAt: Date.now() }).catch(() => {});
+    });
+    await dropQ(done);
+    sentAny = done.length > 0;
+    more = sheetQueue().some(x => !sending.some(s => s.key === x.key));
+    sheetLastError = null;
+    if (loud) toast(`시트에 ${done.length}건 보냈습니다.` + (done.length < sending.length ? ` (${sending.length - done.length}건 거절)` : ''),
+                    done.length < sending.length ? 'bad' : 'good');
+  } catch (e) {
+    console.error('시트 전송 실패 — 큐에 남기고 다시 보냅니다', e);
+    sheetLastError = e.message || '연결 확인';
+    if (loud) toast('시트 전송 실패 · ' + sheetLastError, 'bad');
+  } finally {
+    flushing = false;
+    if (leased) releaseLease();
+    renderSheetBadge();
+  }
+  if (more) setTimeout(flushSheet, 300);
+  else if (sentAny) scheduleVerify(20000);     // 다 보냈으면 잠시 뒤 조용히 대조
+}
+window.addEventListener('online', () => flushSheet());
+setInterval(() => flushSheet(), 60000);
+
+/* ---------- 시트 대조 ----------
+   앱 기록으로 '시트에 있어야 할 줄' 을 만들고(ledger.js expectedLedger), 시트를 읽어 한 칸씩 비교한다.
+   못 보낸 기록이 있으면 시트가 뒤처져 있는 게 당연하므로 기다린다.
+   읽는 사이에 새 기록이 생기면 결과를 버리고 다시 한다. */
+let sheetCheck = null;        // { at, ok, ledger, orders, handRows, count, amount } | { waiting } | { error }
+let verifying = false, verifyTimer = null;
+function scheduleVerify(ms) { clearTimeout(verifyTimer); verifyTimer = setTimeout(() => verifySheet({ quiet: true }), ms); }
+setInterval(() => verifySheet({ quiet: true }), 10 * 60000);
+
+function buildExpected() {
+  const broken = [];
+  const okTx = transactions.filter(t => { try { L.txRecords(t); return true; } catch (e) { broken.push(`${t.id}: ${e.message}`); return false; } });
+  return { ledger: L.expectedLedger({ transactions: okTx, stockLogs, products }), orders: L.expectedOrders(preorders), broken };
+}
+async function verifySheet({ quiet = false } = {}) {
+  if (verifying || !db || !sheetCfg || !sheetCfg.url || !navigator.onLine) return sheetCheck;
+  if (!qSeen) { scheduleVerify(5000); return sheetCheck; }
+  const pending = sheetQueue().length;
+  if (pending) {
+    sheetCheck = { waiting: `못 보낸 기록 ${pending}건을 보낸 뒤 대조합니다` };
+    renderSheetBadge(); flushSheet();
+    return sheetCheck;
+  }
+  verifying = true;
+  renderSheetBadge();
+  try {
+    const epoch = qEpoch;
+    const out = await sheetPost({ action: 'verify' }, 60000);
+    if (epoch !== qEpoch || sheetQueue().length) { scheduleVerify(8000); return sheetCheck; }
+    const exp = buildExpected();
+    const ledger = L.compareLedger(exp.ledger, out.ledger || []);
+    const orders = L.compareOrders(exp.orders, out.orders || []);
+    const bad = n => n.missing.length + n.extra.length + n.diff.length;
+    sheetCheck = {
+      at: Date.now(), ledger, orders, broken: exp.broken, handRows: out.handRows || 0,
+      ok: !bad(ledger) && !bad(orders) && !exp.broken.length,
+      rows: (out.ledger || []).length, txCount: transactions.length,
+      amount: sum(transactions.map(t => t.received || 0)),
+    };
+    if (!quiet) toast(sheetCheck.ok ? '✓ 시트와 앱이 완전히 같습니다.' : '⚠ 시트와 앱이 다른 곳이 있습니다.', sheetCheck.ok ? 'good' : 'bad');
+  } catch (e) {
+    sheetCheck = { error: e.message };
+    if (!quiet) toast('대조 실패 · ' + e.message, 'bad');
+  } finally {
+    verifying = false;
+    renderSheetBadge();
+    if ($('setVerify')) paintVerify();
+  }
+  return sheetCheck;
+}
+/* 다른 곳을 앱 기준으로 고친다 — 빠진 줄 · 다른 줄은 지우고 다시 쓰고, 앱에 없는 줄은 지운다 */
+function fixSheet() {
+  if (!sheetCheck || !sheetCheck.ledger) return;
+  const exp = buildExpected();
+  const stamp = Date.now();
+  const { ledger, orders } = sheetCheck;
+  [...ledger.missing, ...ledger.diff.map(d => d.key)].forEach(k => {
+    if (exp.ledger.has(k)) queueOp({ key: `fix:${k}:${stamp}`, op: 'replace', target: k, records: exp.ledger.get(k) });
+  });
+  ledger.extra.forEach(k => queueOp({ key: `del:${k}:${stamp}`, op: 'delete', target: k }));
+  [...orders.missing, ...orders.diff.map(d => d.key)].forEach(k => {
+    const o = preorders.find(x => L.orderKey(x) === k);
+    if (o) queueOrder(o);
+  });
+  orders.extra.forEach(k => queueOp({ key: `orderdel:${k.slice(6)}:${stamp}`, op: 'orderdel', id: k.slice(6) }));
+  sheetCheck = { waiting: '고치는 중 — 다 보내면 다시 대조합니다' };
+  renderSheetBadge();
+  if ($('setVerify')) paintVerify();
+  toast('시트를 앱 기록대로 고치는 중입니다.', 'good');
+}
+
+const STUCK_MS = 2 * 60 * 1000;
+function sheetIssues() {
+  const q = sheetQueue();
+  return {
+    pending: q.length,
+    stuck: q.filter(x => (x.at || 0) < Date.now() - STUCK_MS).length,
+    rejected: q.filter(x => x.err),
+    mismatch: !!(sheetCheck && sheetCheck.ledger && !sheetCheck.ok),
+  };
+}
+function renderSheetBadge() {
+  const chip = $('sheetChip');
+  if (!chip || !auth || !auth.currentUser) return;
+  const s = sheetIssues();
+  let txt = '';
+  if (!sheetCfg || !sheetCfg.url) txt = '⚠ 시트 미연결';
+  else if (sheetStale()) txt = '⚠ 시트 스크립트 옛 버전';
+  else if (s.rejected.length) txt = `⚠ 시트 거절 ${s.rejected.length}건`;
+  else if (s.stuck) txt = `⚠ 시트 대기 ${s.pending}건`;
+  else if (s.mismatch) txt = '⚠ 시트 불일치';
+  chip.style.display = txt ? '' : 'none';
+  chip.textContent = txt;
+  if ($('setVerify')) paintVerify();
+}
+setInterval(renderSheetBadge, 30000);
+
+/* ================= 판매 화면 ================= */
+let posCat = '전체';
+function renderCats(elId, cur, onPick, pool) {
+  const el = $(elId);
+  el.innerHTML = '';
+  ['전체', ...CATS].forEach(c => {
+    const n = c === '전체' ? pool.length : pool.filter(p => catOf(p) === c).length;
+    if (c !== '전체' && !n) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = c === cur ? 'on' : '';
+    b.innerHTML = `${c}<span class="n">${n}</span>`;
+    b.onclick = () => onPick(c);
+    el.appendChild(b);
+  });
+}
+function renderGrid() {
+  const grid = $('productGrid');
+  const q = nameKey($('qProducts').value);
+  renderCats('posCats', posCat, c => { posCat = c; renderGrid(); }, products);
+  const res = reservedMap();
+  const list = products.filter(p => (posCat === '전체' || catOf(p) === posCat) && (!q || nameKey(p.name).includes(q)));
+  grid.innerHTML = '';
+  list.forEach(p => {
+    const inCart = (cart.find(c => c.id === p.id) || {}).qty || 0;
+    const held = heldOf(p, res);
+    const left = freeOf(p, res) - inCart;
+    let cls = 'bs', label = `남음 ${left}`;
+    if (left <= 0) { cls += ' zero'; label = '품절'; }
+    else if (left <= 3) cls += ' low';
+    const el = document.createElement('button');
+    el.className = 'book-btn' + (left <= 0 ? ' out' : '');
+    el.innerHTML = `<span class="${cls}">${label}</span>
+      <div class="bt">${esc(p.name)}</div>
+      ${held ? `<div class="bh">예약 ${held}개 보관</div>` : ''}
+      <div class="bp${p.price ? '' : ' noprice'}">${p.price ? won(p.price) : '가격 미정'}</div>`;
+    el.onclick = () => addToCart(p.id);
+    grid.appendChild(el);
+  });
+  if (!list.length) {
+    grid.innerHTML = `<div class="cart-empty" style="grid-column:1/-1">${products.length
+      ? '찾는 상품이 없습니다.' : '등록된 상품이 없습니다.<br>‘📦 재고’ 탭에서 상품을 등록하세요.'}</div>`;
+  }
+}
+
+function renderCart() {
+  const box = $('cartItems');
+  box.innerHTML = cart.length ? '' : '<div class="cart-empty">판매할 상품을 누르면<br>여기에 담깁니다.</div>';
+  cart = cart.filter(c => productById(c.id));
+  cart.forEach(c => {
+    const p = productById(c.id);
+    const row = document.createElement('div');
+    row.className = 'cart-row';
+    row.innerHTML = `<div class="title">${esc(p.name)}</div>
+      <div class="qty"><button data-a="dec" aria-label="빼기">−</button><span>${c.qty}</span><button data-a="inc" aria-label="더하기">＋</button></div>
+      <div class="amt">${won(p.price * c.qty)}</div>
+      <div class="del"><button data-a="del" aria-label="삭제">✕</button></div>`;
+    row.querySelector('[data-a=dec]').onclick = () => changeQty(c.id, -1);
+    row.querySelector('[data-a=inc]').onclick = () => changeQty(c.id, 1);
+    row.querySelector('[data-a=del]').onclick = () => { cart = cart.filter(x => x.id !== c.id); renderCart(); };
+    box.appendChild(row);
+  });
+  const qty = sum(cart.map(c => c.qty));
+  $('sumQty').textContent = qty + '개';
+  $('checkout').disabled = !cart.length;
+  renderGrid();
+  updateTotals();
+  renderActionBar();
+  if (currentView() === 'pos') {
+    if (cart.length && !cartOpenedOnce) { openSheet(); cartOpenedOnce = true; }
+    if (!cart.length) { closeSheet(); cartOpenedOnce = false; }
+  }
+}
+const cartTotal = () => sum(cart.map(c => { const p = productById(c.id); return p ? p.price * c.qty : 0; }));
+let discountMode = 'amount';
+function discountPct() {
+  if (discountMode !== 'percent') return 0;
+  const v = parseFloat($('discount').value.replace(/[^\d.]/g, '')) || 0;
+  return Math.min(Math.max(v, 0), 100);
+}
+function currentDiscount() {
+  const total = cartTotal();
+  const d = discountMode === 'percent' ? Math.round(total * discountPct() / 100) : moneyOf($('discount'));
+  return Math.min(d, total);
+}
+const payableAmount = () => cartTotal() - currentDiscount();
+const splitCash = () => moneyOf($('splitCash'));
+const splitValid = () => { const p = payableAmount(), c = splitCash(); return p > 0 && c > 0 && c < p; };
+function syncSplit() {
+  const on = payMethod === '분할';
+  $('splitWrap').classList.toggle('hide', !on);
+  if (!on) { $('splitCash').value = ''; return; }
+  const p = payableAmount(), c = splitCash(), rest = p - c;
+  $('splitTransfer').textContent = won(Math.max(rest, 0));
+  let msg = '현금으로 받은 금액을 적으면 나머지가 계좌이체로 잡힙니다.', bad = false;
+  if (c > p) { msg = `받을 금액(${won(p)})보다 많습니다.`; bad = true; }
+  else if (c > 0 && rest === 0) { msg = '전액 현금입니다 — 💵 현금을 고르세요.'; bad = true; }
+  $('splitHint').textContent = msg;
+  $('splitHint').classList.toggle('bad', bad);
+}
+function updateTotals() {
+  const total = cartTotal(), disc = currentDiscount();
+  $('sumTotal').textContent = won(total);
+  $('sumPayable').textContent = won(total - disc);
+  $('discCalc').textContent = (discountMode === 'percent' && disc > 0) ? `${discountPct()}% → −${won(disc)}` : '';
+  const free = total > 0 && total - disc === 0;
+  $('discLabelWrap').classList.toggle('hide', disc <= 0);
+  if (disc <= 0) $('discLabel').value = '';
+  $('discLabelText').textContent = free ? '무료로 나간 이유 (시트 비고 칸에 적힙니다)' : '할인 사유 (선택 · 시트 비고 칸에 적힙니다)';
+  $('checkout').textContent = free ? '0원 출고' : '결제 완료';
+  $('checkout').classList.toggle('free', free);
+  syncSplit();
+  renderActionBar();
+}
+function selectPayMethod(m) {
+  payMethod = m;
+  document.querySelectorAll('.pay-methods button').forEach(b => b.classList.toggle('sel', b.dataset.method === m));
+  $('customerLabel').textContent = m === '현금' ? '고객 이름 (선택)' : '입금자명 (선택)';
+  syncSplit();
+}
+function addToCart(id) {
+  const p = productById(id); if (!p) return;
+  const c = cart.find(x => x.id === id);
+  if ((c ? c.qty : 0) >= freeOf(p)) { toast(heldOf(p) ? '남은 수량은 예약분입니다.' : '재고가 없습니다.', 'bad'); return; }
+  if (c) c.qty++; else cart.push({ id, qty: 1 });
+  beep();
+  renderCart();
+}
+function changeQty(id, d) {
+  const c = cart.find(x => x.id === id); if (!c) return;
+  const p = productById(id);
+  if (d > 0 && p && c.qty >= freeOf(p)) { toast('재고가 부족합니다.', 'bad'); return; }
+  c.qty += d;
+  if (c.qty <= 0) cart = cart.filter(x => x.id !== id);
+  renderCart();
+}
+function clearCart() {
+  cart = [];
+  ['customer', 'discount', 'discLabel', 'splitCash'].forEach(id => { $(id).value = ''; });
+  if (payMethod === '분할') selectPayMethod('계좌이체');
+  renderCart();
+  closeSheet();
+}
+
+/* 거래를 저장하기 직전 마지막 확인 — 시트로 갈 줄을 미리 만들어 식이 맞는지 본다.
+   하나라도 어긋나면 저장하지 않는다 (틀린 매출이 시트에 남는 것보다 멈추는 편이 낫다). */
+function checkedRecords(t) {
+  let recs;
+  try { recs = L.txRecords(t); } catch (e) { return { error: e.message }; }
+  const errs = L.checkTxRecords(t, recs);
+  return errs.length ? { error: errs.join(', ') } : { recs };
+}
+
+function checkout() {
+  if (!cart.length || !requireOpen('판매')) return;
+  const lines = cart.map(c => ({ p: productById(c.id), qty: c.qty })).filter(l => l.p);
+  const noPrice = lines.filter(l => !(l.p.price > 0));
+  if (noPrice.length) { toast(`가격이 정해지지 않은 상품이 있습니다: ${noPrice.map(l => l.p.name).join(', ')} — 재고 탭에서 가격을 넣어 주세요.`, 'bad'); return; }
+  const res = reservedMap();
+  const short = lines.filter(l => l.qty > freeOf(l.p, res));
+  if (short.length) { toast(`현장 판매 가능 수량을 넘었습니다: ${short.map(l => l.p.name).join(', ')}`, 'bad'); return; }
+  const total = cartTotal(), discount = currentDiscount(), payable = total - discount;
+  if (payMethod === '분할' && !splitValid()) {
+    toast(splitCash() <= 0 ? '현금으로 받은 금액을 입력하세요.' : `현금 금액은 받을 금액(${won(payable)})보다 적어야 합니다.`, 'bad');
+    $('splitCash').focus(); return;
+  }
+  const free = total > 0 && payable === 0;
+  const t = {
+    type: 'sale', time: new Date().toISOString(),
+    items: lines.map(l => ({ bookId: l.p.id, title: l.p.name, category: catOf(l.p), qty: l.qty, price: l.p.price })),
+    qty: sum(lines.map(l => l.qty)), total, discount,
+    discountPct: discountMode === 'percent' ? discountPct() : null,
+    received: payable, method: payMethod,
+    split: payMethod === '분할' ? { cash: splitCash(), transfer: payable - splitCash() } : null,
+    discountLabel: discount > 0 ? ($('discLabel').value.trim() || (free ? '무료' : '할인')) : null,
+    customer: $('customer').value.trim() || null, phone: null, note: null, by: me(),
+  };
+  const chk = checkedRecords(t);
+  if (chk.error) { toast('⚠ 결제를 저장하지 않았습니다 — ' + chk.error, 'bad'); return; }
+  const ref = doc(txCol);
+  const batch = writeBatch(db);
+  lines.forEach(l => batch.update(doc(productsCol, l.p.id), { stock: increment(-l.qty), sold: increment(l.qty) }));
+  batch.set(ref, t);
+  batch.commit().catch(e => { console.error(e); toast('결제 저장 실패 · 연결 확인', 'bad'); });
+  queueOp({ key: 'tx:' + ref.id, op: 'rows', records: chk.recs });
+  writeLogs(lines.map(l => ({ bookId: l.p.id, title: l.p.name, reason: '판매', before: l.p.stock, after: l.p.stock - l.qty, txId: ref.id })));
+  chime();
+  const how = t.split ? `현금 ${won(t.split.cash)} · 계좌이체 ${won(t.split.transfer)}` : payMethod;
+  toast(free ? `0원 출고 · ${t.qty}개` : `결제 완료 · ${won(payable)} (${how}${t.customer ? ' · ' + t.customer : ''})`, 'good');
+  clearCart();
+}
+
+/* ================= 반품 =================
+   품목별로 몇 개 돌려받는지 고르면, 그 몫의 실제 받은 돈(할인 반영)을 환불 금액으로 채워 준다.
+   '다시 팔 수 있음' 을 끄면 재고는 그대로 두고 시트에는 '재고조정 −n (반품 후 폐기)' 줄을 같이 남긴다 —
+   그래야 시트 요약의 남은 재고가 앱과 맞는다. */
+function returnedMap(t) {
+  const m = {};
+  transactions.forEach(r => {
+    if (r.type === 'return' && r.refId === t.id) (r.items || []).forEach(i => { m[i.title] = (m[i.title] || 0) + i.qty; });
+  });
+  return m;
+}
+const returnable = t => { const m = returnedMap(t); return sum((t.items || []).map(i => i.qty - (m[i.title] || 0))); };
+const methodText = t => t.split ? `현금 ${won(Math.abs(t.split.cash))} · 계좌이체 ${won(Math.abs(t.split.transfer))}` : (t.method === '분할' ? '분할결제' : t.method);
+
+function returnPickerModal() {
+  if (!requireOpen('반품')) return;
+  const list = transactions.filter(t => t.type === 'sale' && returnable(t) > 0);
+  if (!list.length) { toast('반품할 결제 내역이 없습니다.', 'bad'); return; }
+  openModal(`<h3>반품할 결제 선택</h3><p class="desc">최근 순입니다.</p>
+    <div class="ret-list">${list.slice(0, 80).map(t => `<div class="pick-row" data-id="${t.id}">
+      <div><div class="ret-title">${(t.items || []).map(i => `${esc(i.title)} ×${i.qty}`).join(', ')}</div>
+      <div class="ret-sub">${fmtDateTime(t.time)} · ${won(t.received)} · ${esc(methodText(t))}${t.customer ? ' · ' + esc(t.customer) : ''}</div></div>
+      <button class="mini-btn del" data-a="pick">반품</button></div>`).join('')}</div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">닫기</button></div>`);
+  document.querySelectorAll('#modal .pick-row').forEach(row => {
+    row.querySelector('[data-a=pick]').onclick = () => returnModal(list.find(t => t.id === row.dataset.id));
+  });
+  $('mCancel').onclick = closeModal;
+}
+function returnModal(t) {
+  if (!t) return;
+  const done = returnedMap(t);
+  const recs = L.txRecords(t);                         // 품목마다 실제 받은 돈
+  const rows = (t.items || []).map((i, k) => ({ i, k, max: i.qty - (done[i.title] || 0), net: Number(recs[k].금액) || 0 }))
+    .filter(r => r.max > 0);
+  const isSplit = t.method === '분할';
+  openModal(`<h3>반품 처리</h3>
+    <p class="desc">${fmtDateTime(t.time)} · ${won(t.received)} · ${esc(methodText(t))}</p>
+    <div class="ret-list">${rows.map(r => `<div class="ret-row">
+      <div><div class="ret-title">${esc(r.i.title)}</div><div class="ret-sub">${won(r.i.price)} · 반품 가능 ${r.max}개</div></div>
+      <div class="ret-qty"><button type="button" data-a="dec">−</button>
+      <input class="rq" data-k="${r.k}" data-max="${r.max}" value="${r.max}" inputmode="numeric"><button type="button" data-a="inc">＋</button></div>
+    </div>`).join('')}</div>
+    ${isSplit ? `<div class="field" style="margin-top:14px"><label>환불 금액 (수단별로 실제 돌려줄 금액)</label>
+      <div class="sp-row"><span class="sp-k">💵 현금</span><span><input id="mRefundCash" inputmode="numeric"><em>원</em></span></div>
+      <div class="sp-row"><span class="sp-k">💳 계좌이체</span><span><input id="mRefundTr" inputmode="numeric"><em>원</em></span></div></div>`
+    : `<div class="field" style="margin-top:14px"><label>환불 금액 (${esc(t.method)}로 돌려줄 금액)</label><input id="mRefund" inputmode="numeric"></div>`}
+    <label class="chkline"><input type="checkbox" id="mRestock" checked> 돌려받은 상품을 다시 팔 수 있음 (재고로 되돌림)</label>
+    <div class="info-box" id="mRetInfo"></div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn solid-danger" id="mSave">반품 처리</button></div>`);
+  const picks = () => [...document.querySelectorAll('#modal .rq')].map(inp => {
+    let q = parseInt(digits(inp.value), 10) || 0;
+    q = Math.min(Math.max(q, 0), +inp.dataset.max);
+    inp.value = q;
+    return { k: +inp.dataset.k, q };
+  });
+  const refundDefault = () => sum(picks().map(({ k, q }) => {
+    const r = rows.find(x => x.k === k);
+    return q === r.i.qty ? r.net : Math.floor(r.net * q / r.i.qty);
+  }));
+  const paint = () => {
+    const amt = refundDefault();
+    if (isSplit) {
+      const c = Math.floor(amt * t.split.cash / (t.split.cash + t.split.transfer));
+      $('mRefundCash').value = fmt(c); $('mRefundTr').value = fmt(amt - c);
+    } else $('mRefund').value = fmt(amt);
+    info();
+  };
+  const info = () => {
+    const n = sum(picks().map(p => p.q));
+    $('mRetInfo').innerHTML = `반품 <b>${n}개</b> · 환불 <b>${won(refundTotal())}</b><br>` +
+      ($('mRestock').checked ? '재고가 그만큼 다시 늘어납니다.' : '재고는 그대로 두고, 시트에 폐기(재고조정) 줄을 같이 남깁니다.');
+  };
+  const refundTotal = () => isSplit ? moneyOf($('mRefundCash')) + moneyOf($('mRefundTr')) : moneyOf($('mRefund'));
+  document.querySelectorAll('#modal .ret-row').forEach(row => {
+    const inp = row.querySelector('.rq');
+    row.querySelector('[data-a=dec]').onclick = () => { inp.value = (+inp.value || 0) - 1; paint(); };
+    row.querySelector('[data-a=inc]').onclick = () => { inp.value = (+inp.value || 0) + 1; paint(); };
+    inp.oninput = paint;
+  });
+  (isSplit ? ['mRefundCash', 'mRefundTr'] : ['mRefund']).forEach(id => { moneyInput($(id)); $(id).addEventListener('input', info); });
+  $('mRestock').onchange = info;
+  paint();
+  $('mCancel').onclick = closeModal;
+  $('mSave').onclick = () => {
+    const ps = picks().filter(p => p.q > 0);
+    if (!ps.length) { toast('반품할 수량을 고르세요.', 'bad'); return; }
+    const items = ps.map(({ k, q }) => ({ ...t.items[k], qty: q }));
+    const gross = sum(items.map(i => i.price * i.qty));
+    const refund = refundTotal();
+    if (refund > gross) { toast(`환불 금액은 정가 합계(${won(gross)})를 넘을 수 없습니다.`, 'bad'); return; }
+    let method = t.method, split = null;
+    if (isSplit) {
+      const c = moneyOf($('mRefundCash')), tr = moneyOf($('mRefundTr'));
+      if (c && tr) split = { cash: -c, transfer: -tr };
+      else method = c ? '현금' : (tr ? '계좌이체' : '현금');
+    }
+    const restock = $('mRestock').checked;
+    const r = {
+      type: 'return', refId: t.id, time: new Date().toISOString(), items,
+      qty: -sum(items.map(i => i.qty)), total: -gross, discount: 0, received: -refund, method, split,
+      customer: t.customer || null, phone: t.phone || null, note: restock ? '반품' : '반품 · 폐기', restock, by: me(),
+      disposeKeys: [],
+    };
+    const chk = checkedRecords(r);
+    if (chk.error) { toast('⚠ 반품을 저장하지 않았습니다 — ' + chk.error, 'bad'); return; }
+    const ref = doc(txCol);
+    const batch = writeBatch(db);
+    const ops = [{ key: 'tx:' + ref.id, op: 'rows', records: chk.recs }];
+    items.forEach(i => {
+      const p = productOfItem(i);
+      if (!p) return;
+      if (restock) batch.update(doc(productsCol, p.id), { stock: increment(i.qty), sold: increment(-i.qty) });
+      else {
+        batch.update(doc(productsCol, p.id), { sold: increment(-i.qty) });
+        const op = stockMove(batch, { product: p, kind: L.KIND.ADJ, qty: -i.qty, note: '반품 후 폐기', reason: '조정',
+                                      before: p.stock, after: p.stock });
+        r.disposeKeys.push(op.key);
+        ops.push(op);
+      }
+    });
+    batch.set(ref, r);
+    batch.commit().catch(e => { console.error(e); toast('반품 저장 실패 · 연결 확인', 'bad'); });
+    ops.forEach(queueOp);
+    writeLogs(items.map(i => { const p = productOfItem(i); return p && restock ? { bookId: p.id, title: p.name, reason: '반품',
+      before: p.stock, after: p.stock + i.qty, txId: ref.id } : null; }).filter(Boolean));
+    closeModal();
+    toast(`반품 완료 · ${won(refund)} 환불`, 'good');
+  };
+}
+
+/* ================= 거래 지우기 =================
+   잘못 찍은 결제를 통째로 없던 일로 한다 — 재고를 되돌리고, 시트의 그 줄도 지운다.
+   예약 수령으로 생긴 거래면 그 예약은 다시 '수령 대기' 가 된다. */
+function deleteTxModal(t) {
+  const kids = transactions.filter(r => r.type === 'return' && r.refId === t.id);
+  if (kids.length) { toast(`이 결제에 반품 ${kids.length}건이 걸려 있습니다. 반품 기록을 먼저 지우세요.`, 'bad'); return; }
+  const order = t.preorderId ? preorders.find(o => o.id === t.preorderId) : null;
+  openModal(`<h3>${t.type === 'return' ? '반품 기록' : '결제 기록'} 삭제</h3>
+    <div class="info-box">${fmtDateTime(t.time)} · ${(t.items || []).map(i => `${esc(i.title)} ×${i.qty}`).join(', ')} · ${won(t.received)}</div>
+    <div class="warn-box">지우면 <b>재고가 되돌아가고</b> 매출에서 빠지며, <b>시트의 그 줄도 지워집니다.</b>
+      ${order ? `<br>이 결제는 <b>#${order.no} ${esc(order.name)}</b> 님 예약 수령 건입니다 — 예약이 다시 <b>수령 대기</b>로 돌아갑니다.` : ''}</div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn solid-danger" id="mSave">삭제</button></div>`);
+  $('mCancel').onclick = closeModal;
+  $('mSave').onclick = async () => {
+    const btn = $('mSave'); btn.disabled = true; btn.textContent = '삭제 중…';
+    try {
+      const batch = writeBatch(db);
+      const ops = [{ key: 'del:tx:' + t.id, op: 'delete', target: 'tx:' + t.id }];
+      (t.items || []).forEach(i => {
+        const p = productOfItem(i);
+        if (!p) return;
+        if (t.type === 'sale') batch.update(doc(productsCol, p.id), { stock: increment(i.qty), sold: increment(-i.qty) });
+        else if (t.restock) batch.update(doc(productsCol, p.id), { stock: increment(-i.qty), sold: increment(i.qty) });
+        else batch.update(doc(productsCol, p.id), { sold: increment(i.qty) });
+      });
+      (t.disposeKeys || []).forEach(k => {
+        batch.set(doc(logsCol), logEntry({ reason: '취소', voidKey: k, note: '반품 기록 삭제로 폐기 줄 취소', txId: t.id }));
+        ops.push({ key: 'del:' + k, op: 'delete', target: k });
+      });
+      batch.delete(doc(txCol, t.id));
+      if (order) batch.update(doc(ordersCol, order.id), { handed: false, handedAt: null, txId: null });
+      await batch.commit();
+      ops.forEach(queueOp);
+      if (order) queueOrder({ ...order, handed: false });
+      writeLogs((t.items || []).map(i => { const p = productOfItem(i); return p ? { bookId: p.id, title: p.name, reason: '기록 삭제',
+        note: `${t.type === 'return' ? '반품' : '판매'} 기록 삭제`, txId: t.id } : null; }).filter(Boolean));
+      closeModal();
+      toast('삭제했습니다.', 'good');
+    } catch (e) {
+      console.error(e); btn.disabled = false; btn.textContent = '다시 시도';
+      toast('삭제 실패 · 연결 확인', 'bad');
+    }
+  };
+}
+
+/* ================= 예약 =================
+   행사 전에 받아 두는 주문 (사업팀 POS 의 선주문을 그대로 가져왔다).
+   1) 예약을 받아도 재고는 줄지 않는다. 대신 판매 화면이 (재고 − 미수령 예약) 까지만 판다.
+   2) 매출은 '입금' 이 아니라 '수령' 때 잡힌다. 수령 처리를 누르면 재고가 줄고 판매 1건이 생기고 시트로 간다.
+   3) 예약 대장 자체도 시트 '예약' 탭에 한 건 한 줄로 간다. 입금 · 수령이 바뀌면 그 줄이 그 자리에서 바뀐다. */
+const orderFilter = () => ({ q: nameKey($('qOrders').value), unpaid: $('onlyUnpaid').checked, waiting: $('onlyWaiting').checked });
+function filteredOrders() {
+  const f = orderFilter();
+  return preorders.filter(o => {
+    if (f.unpaid && o.paid) return false;
+    if (f.waiting && o.handed) return false;
+    if (!f.q) return true;
+    return [o.name, o.phone, L.orderDesc(o), '#' + o.no, String(o.no)].some(v => nameKey(v).includes(f.q));
+  });
+}
+function renderPreorders() {
+  const waiting = preorders.filter(o => !o.handed);
+  $('oCount').textContent = preorders.length + '건';
+  $('oQty').textContent = sum(preorders.map(L.orderQty)) + '개';
+  $('oWaiting').textContent = sum(waiting.map(L.orderQty)) + '개';
+  $('oPaid').textContent = won(sum(waiting.filter(o => o.paid).map(L.orderAmt)));
+  $('oUnpaid').textContent = won(sum(waiting.filter(o => !o.paid).map(L.orderAmt)));
+  const res = reservedMap();
+  $('availBox').innerHTML = products.length ? products.map(p => {
+    const held = heldOf(p, res), free = freeOf(p, res);
+    return `<div class="avail-chip"><div class="t">${esc(p.name)}</div>
+      <div class="free${free <= 0 ? ' short' : ''}">${free}개</div><div class="nums">재고 ${p.stock} − 예약 ${held}</div></div>`;
+  }).join('') : '<div class="avail-none">등록된 상품이 없습니다.</div>';
+  const list = filteredOrders();
+  const f = orderFilter();
+  const filtering = !!f.q || f.unpaid || f.waiting;
+  $('orderFilters').classList.toggle('on', filtering);
+  $('orderCount').innerHTML = filtering ? `검색 결과 <b>${list.length}건</b> / 전체 ${preorders.length}건` : `전체 <b>${preorders.length}건</b>`;
+  const body = $('orderBody');
+  body.innerHTML = '';
+  list.forEach(o => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="cell-main" data-label="성함"><div class="ord-no">#${o.no || '?'}</div>
+        <div class="ord-name">${esc(o.name || '(이름 없음)')}</div>${o.phone ? `<div class="sub">${esc(o.phone)}</div>` : ''}
+        ${o.note ? `<div class="sub">${esc(o.note)}</div>` : ''}</td>
+      <td data-label="주문 내역"><div class="ord-items">${esc(L.orderDesc(o))}</div></td>
+      <td class="num" data-label="수량"><b>${L.orderQty(o)}</b>개</td>
+      <td class="num" data-label="금액">${won(L.orderAmt(o))}<div class="sub">${esc(o.method || '계좌이체')}</div></td>
+      <td class="center" data-label="입금">${o.handed ? (o.paid ? '<span class="pill mute">✔ 입금</span>' : '<span class="pill mute">현장 결제</span>')
+        : `<button class="tog ${o.paid ? 'on' : 'wait'}" data-a="paid">${o.paid ? '✔ 입금' : '미입금'}</button>`}</td>
+      <td class="center" data-label="수령">${o.handed ? `<span class="pill mute">✔ 수령 ${o.handedAt ? fmtDateTime(o.handedAt) : ''}</span>`
+        : '<button class="tog go" data-a="hand">수령 처리</button>'}</td>
+      <td class="center" data-label="관리">${o.handed ? '' : '<button class="mini-btn" data-a="edit">수정</button>'}
+        <button class="mini-btn del" data-a="del">삭제</button></td>`;
+    const on = (a, fn) => { const b = tr.querySelector(`[data-a=${a}]`); if (b) b.onclick = fn; };
+    on('paid', () => togglePaid(o)); on('hand', () => pickupModal(o)); on('edit', () => orderModal(o)); on('del', () => deleteOrderModal(o));
+    body.appendChild(tr);
+  });
+  if (!list.length) body.innerHTML = `<tr class="empty-row"><td colspan="7">${preorders.length
+    ? '조건에 맞는 예약이 없습니다.' : '아직 예약이 없습니다. “＋ 예약 받기” 로 등록하세요.'}</td></tr>`;
+}
+async function togglePaid(o) {
+  const paid = !o.paid;
+  const patch = { paid, paidAt: paid ? new Date().toISOString() : null };
+  try {
+    await updateDoc(doc(ordersCol, o.id), patch);
+    queueOrder({ ...o, ...patch });
+    toast(paid ? `#${o.no} ${o.name} 입금 확인` : '입금 표시를 해제했습니다.', paid ? 'good' : '');
+  } catch (e) { console.error(e); toast('저장 실패 · 연결 확인', 'bad'); }
+}
+/* 예약번호는 1부터 차례로 — 여러 기기가 동시에 받아도 겹치지 않게 트랜잭션으로 뽑는다 */
+async function nextOrderNo() {
+  try {
+    return await runTransaction(db, async tr => {
+      const ref = doc(db, 'meta', 'counters');
+      const s = await tr.get(ref);
+      const n = ((s.exists() && s.data().orderNo) || 0) + 1;
+      tr.set(ref, { orderNo: n }, { merge: true });
+      return n;
+    });
+  } catch (e) {
+    console.error('예약번호 트랜잭션 실패 — 목록 기준으로 정함', e);
+    return Math.max(0, ...preorders.map(o => o.no || 0)) + 1;
+  }
+}
+let orderDraft = [];
+function orderModal(existing = null) {
+  const editing = !!existing;
+  orderDraft = editing ? (existing.items || []).map(i => { const p = productOfItem(i); return p ? { id: p.id, qty: i.qty } : null; }).filter(Boolean) : [];
+  const v = k => (editing ? esc(existing[k] || '') : '');
+  openModal(`<h3>${editing ? `예약 수정 · #${existing.no}` : '예약 받기'}</h3>
+    <div class="field-row">
+      <div class="field"><label>성함</label><input id="oName" placeholder="예) 김민지" value="${v('name')}"></div>
+      <div class="field"><label>연락처 (선택)</label><input id="oPhone" inputmode="tel" placeholder="010-0000-0000" value="${v('phone')}"></div>
+    </div>
+    <div class="field"><label>결제수단</label><select id="oMethod">
+      ${['계좌이체', '현금'].map(m => `<option${editing && existing.method === m ? ' selected' : ''}>${m}</option>`).join('')}</select></div>
+    <div class="field"><label>상품 담기</label><div class="ret-list" id="oPick"></div></div>
+    <div class="field"><label>메모 (선택)</label><input id="oNote" placeholder="예) 2부 예배 후 수령" value="${v('note')}"></div>
+    <label class="chkline"><input type="checkbox" id="oPaidChk"${editing && existing.paid ? ' checked' : ''}> 입금 완료로 표시</label>
+    <div class="info-box" id="oSum"></div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn green" id="mSave">${editing ? '저장' : '예약 등록'}</button></div>`, true);
+  const dq = id => (orderDraft.find(d => d.id === id) || {}).qty || 0;
+  const res = reservedMap();
+  if (editing) (existing.items || []).forEach(i => { const p = productOfItem(i); if (p) res.set(p.id, (res.get(p.id) || 0) - i.qty); });
+  const paintSum = () => {
+    const qty = sum(orderDraft.map(d => d.qty));
+    const amt = sum(orderDraft.map(d => (productById(d.id)?.price || 0) * d.qty));
+    const over = orderDraft.filter(d => { const p = productById(d.id); return p && d.qty > freeOf(p, res); });
+    $('oSum').innerHTML = qty ? `담은 상품 <b>${qty}개</b> · 예약 금액 <b>${won(amt)}</b>
+      ${over.length ? `<div class="warn-text" style="color:var(--red);margin-top:4px">⚠ 남은 수량보다 많습니다: ${over.map(d => esc(productById(d.id).name)).join(', ')} — 더 만들 계획이 아니면 줄여 주세요.</div>` : ''}
+      <div class="dim" style="margin-top:4px">예약을 받아도 재고는 줄지 않고, 그만큼 현장 판매에서 빠집니다.</div>` : '아래에서 ＋ 를 눌러 상품을 담으세요.';
+  };
+  const pick = $('oPick');
+  products.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'ret-row';
+    row.innerHTML = `<div><div class="ret-title">${esc(p.name)}</div><div class="ret-sub">${p.price ? won(p.price) : '<b style="color:var(--red)">가격 미정</b>'} · 예약 가능 ${freeOf(p, res)}개</div></div>
+      <div class="ret-qty"><button type="button" data-a="minus">−</button><input type="text" inputmode="numeric" value="${dq(p.id)}" data-a="num"><button type="button" data-a="plus">＋</button></div>`;
+    const num = row.querySelector('[data-a=num]');
+    const set = val => {
+      const q = Math.max(0, parseInt(digits(val), 10) || 0);
+      num.value = q;
+      const cur = orderDraft.find(d => d.id === p.id);
+      if (!q) orderDraft = orderDraft.filter(d => d.id !== p.id);
+      else if (cur) cur.qty = q; else orderDraft.push({ id: p.id, qty: q });
+      paintSum();
+    };
+    row.querySelector('[data-a=minus]').onclick = () => set(dq(p.id) - 1);
+    row.querySelector('[data-a=plus]').onclick = () => set(dq(p.id) + 1);
+    num.addEventListener('input', () => set(num.value));
+    pick.appendChild(row);
+  });
+  paintSum();
+  $('mCancel').onclick = closeModal;
+  $('mSave').onclick = async () => {
+    const name = $('oName').value.trim();
+    if (!name) { toast('성함을 입력하세요.', 'bad'); return; }
+    if (!orderDraft.length) { toast('상품을 하나 이상 담으세요.', 'bad'); return; }
+    const noPrice = orderDraft.map(d => productById(d.id)).filter(p => !(p.price > 0));
+    if (noPrice.length) { toast(`가격이 정해지지 않은 상품: ${noPrice.map(p => p.name).join(', ')} — 재고 탭에서 가격을 먼저 넣어 주세요.`, 'bad'); return; }
+    const items = orderDraft.map(d => { const p = productById(d.id); return { bookId: p.id, title: p.name, category: catOf(p), qty: d.qty, price: p.price, amount: p.price * d.qty }; });
+    const paid = $('oPaidChk').checked;
+    const patch = { name, phone: $('oPhone').value.trim() || null, note: $('oNote').value.trim() || null,
+      method: $('oMethod').value, items, qty: sum(items.map(i => i.qty)), amount: sum(items.map(i => i.amount)),
+      paid, paidAt: paid ? (existing?.paidAt || new Date().toISOString()) : null };
+    const btn = $('mSave'); btn.disabled = true; btn.textContent = '저장 중…';
+    try {
+      if (editing) {
+        await updateDoc(doc(ordersCol, existing.id), patch);
+        queueOrder({ ...existing, ...patch });
+      } else {
+        const no = await nextOrderNo();
+        const ref = doc(ordersCol);
+        const o = { ...patch, no, handed: false, handedAt: null, txId: null, time: new Date().toISOString(), createdAt: Date.now(), by: me() };
+        await setDoc(ref, o);
+        queueOrder({ id: ref.id, ...o });
+      }
+      closeModal();
+      toast(editing ? '예약을 수정했습니다.' : `예약 등록 · ${name} ${patch.qty}개`, 'good');
+    } catch (e) { console.error(e); btn.disabled = false; btn.textContent = '다시 시도'; toast('저장 실패 · 연결 확인', 'bad'); }
+  };
+  setTimeout(() => $('oName').focus(), 60);
+}
+/* 수령 처리 — 여기서 비로소 재고가 줄고 매출이 잡힌다. 판매 화면과 똑같은 모양의 거래를 남긴다. */
+function pickupModal(o) {
+  if (!requireOpen('예약 수령')) return;
+  const amt = L.orderAmt(o);
+  const lines = (o.items || []).map(i => ({ i, p: productOfItem(i) }));
+  const missing = lines.filter(l => !l.p), short = lines.filter(l => l.p && l.p.stock < l.i.qty);
+  openModal(`<h3>수령 처리 · #${o.no} ${esc(o.name)}</h3>
+    ${missing.length ? `<div class="warn-box">지워진 상품이 있습니다 (${missing.map(l => esc(l.i.title)).join(', ')}). 그 품목은 재고 차감 없이 매출로만 남습니다.</div>` : ''}
+    ${short.length ? `<div class="warn-box">재고보다 많습니다 (${short.map(l => `${esc(l.i.title)} 재고 ${l.p.stock} / 예약 ${l.i.qty}`).join(', ')}). 진행하면 재고가 마이너스가 됩니다.</div>` : ''}
+    <div class="info-box">${esc(L.orderDesc(o))}<br>받을 금액 <b>${won(amt)}</b></div>
+    <div class="field"><label>결제수단 ${o.paid ? '(입금 완료된 예약)' : ''}</label><select id="pMethod">
+      ${['계좌이체', '현금'].map(m => `<option${(o.method || '계좌이체') === m ? ' selected' : ''}>${m}</option>`).join('')}</select></div>
+    ${o.paid ? '' : `<div class="warn-box"><b>아직 입금 표시가 안 된 예약입니다.</b> 지금 돈을 받는 거라면 그대로 진행하세요. 수령 처리하면 ${won(amt)} 이 매출로 잡힙니다.</div>`}
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn green" id="mSave">수령 완료</button></div>`);
+  $('mCancel').onclick = closeModal;
+  $('mSave').onclick = async () => {
+    const btn = $('mSave'); btn.disabled = true; btn.textContent = '처리 중…';
+    const method = $('pMethod').value;
+    const t = { type: 'sale', time: new Date().toISOString(),
+      items: (o.items || []).map(i => ({ bookId: i.bookId || null, title: i.title, category: i.category || null, qty: i.qty, price: i.price })),
+      qty: L.orderQty(o), total: amt, discount: 0, discountPct: null, received: amt, method, split: null, discountLabel: null,
+      customer: o.name || null, phone: o.phone || null, note: `예약 수령 #${o.no}`, preorderId: o.id, by: me() };
+    const chk = checkedRecords(t);
+    if (chk.error) { btn.disabled = false; btn.textContent = '수령 완료'; toast('⚠ 저장하지 않았습니다 — ' + chk.error, 'bad'); return; }
+    try {
+      const ref = doc(txCol);
+      const handedAt = new Date().toISOString();
+      const batch = writeBatch(db);
+      lines.forEach(l => { if (l.p) batch.update(doc(productsCol, l.p.id), { stock: increment(-l.i.qty), sold: increment(l.i.qty) }); });
+      batch.set(ref, t);
+      const patch = { handed: true, handedAt, txId: ref.id, paid: true, paidAt: o.paidAt || handedAt, method };   // 실제로 받은 수단으로
+      batch.update(doc(ordersCol, o.id), patch);
+      await batch.commit();
+      queueOp({ key: 'tx:' + ref.id, op: 'rows', records: chk.recs });
+      queueOrder({ ...o, ...patch });
+      writeLogs(lines.filter(l => l.p).map(l => ({ bookId: l.p.id, title: l.p.name, reason: '판매', before: l.p.stock,
+        after: l.p.stock - l.i.qty, txId: ref.id, note: `예약 수령 #${o.no}` })));
+      closeModal(); chime();
+      toast(`#${o.no} ${o.name} 수령 완료 · ${won(amt)}`, 'good');
+    } catch (e) { console.error(e); btn.disabled = false; btn.textContent = '다시 시도'; toast('처리 실패 · 연결 확인', 'bad'); }
+  };
+}
+function deleteOrderModal(o) {
+  openModal(`<h3>예약 삭제 · #${o.no}</h3>
+    ${o.handed ? `<div class="warn-box"><b>이미 수령한 예약입니다.</b> 여기서 지워도 매출과 재고는 그대로입니다.
+      판매 자체를 없애려면 ‘📊 매출 내역’ 에서 그 결제를 지우세요.</div>`
+      : '<div class="info-box">아직 수령 전이라 재고·매출에는 영향이 없습니다. 지우면 그만큼 현장 판매 가능 수량이 늘어납니다.</div>'}
+    <div class="info-box">${esc(o.name)} · ${esc(L.orderDesc(o))} · ${won(L.orderAmt(o))}</div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn solid-danger" id="mSave">삭제</button></div>`);
+  $('mCancel').onclick = closeModal;
+  $('mSave').onclick = async () => {
+    try {
+      await deleteDoc(doc(ordersCol, o.id));
+      queueOp({ key: 'orderdel:' + o.id, op: 'orderdel', id: o.id });
+      closeModal(); toast('예약을 삭제했습니다.', 'good');
+    } catch (e) { console.error(e); toast('삭제 실패 · 연결 확인', 'bad'); }
+  };
+}
+function exportOrdersCsv() {
+  const head = ['예약번호', '성함', '연락처', '주문 내역', '수량', '금액', '결제수단', '입금', '수령', '메모', '등록일시'];
+  const rows = filteredOrders().map(o => [o.no, o.name, o.phone || '', L.orderDesc(o), L.orderQty(o), L.orderAmt(o),
+    o.method || '', o.paid ? '입금' : '미입금', o.handed ? '수령' : '대기', o.note || '', fmtDateTime(o.time)]);
+  downloadCsv(`바자회_예약_${ymd(new Date())}.csv`, [head, ...rows]);
+}
+
+/* ================= 재고 ================= */
+function renderInventory() {
+  const res = reservedMap();
+  $('statKinds').textContent = products.length + '종';
+  $('statStock').textContent = sum(products.map(p => p.stock || 0)) + '개';
+  $('statHeld').textContent = sum(products.map(p => heldOf(p, res))) + '개';
+  $('statNoPrice').textContent = products.filter(p => !(p.price > 0)).length + '종';
+  const body = $('invBody');
+  body.innerHTML = '';
+  products.forEach(p => {
+    const held = heldOf(p, res), free = freeOf(p, res);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="cell-main" data-label="상품">${catBadge(p)}${esc(p.name)}</td>
+      <td class="num" data-label="판매가">${p.price ? won(p.price) : '<b style="color:var(--red)">가격 미정</b>'}</td>
+      <td class="num" data-label="재고"><b>${p.stock}</b>개</td>
+      <td class="num" data-label="예약 보관">${held ? held + '개' : '-'}</td>
+      <td class="num" data-label="현장 판매 가능" style="${free <= 0 ? 'color:var(--red);font-weight:600' : ''}">${free}개</td>
+      <td class="num" data-label="판매">${p.sold || 0}개</td>
+      <td class="center" data-label="관리"><button class="mini-btn plus" data-a="in">＋ 입고</button><button class="mini-btn" data-a="adj">재고 수정</button><button class="mini-btn" data-a="edit">정보</button><button class="mini-btn" data-a="log">이력</button></td>`;
+    tr.querySelector('[data-a=in]').onclick = () => restockModal(p);
+    tr.querySelector('[data-a=adj]').onclick = () => adjustModal(p);
+    tr.querySelector('[data-a=edit]').onclick = () => editProductModal(p);
+    tr.querySelector('[data-a=log]').onclick = () => logModal(p);
+    body.appendChild(tr);
+  });
+  if (!products.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">등록된 상품이 없습니다.</td></tr>';
+}
+const catSelect = cur => `<select id="mCat">${CATS.map(c => `<option${c === cur ? ' selected' : ''}>${c}</option>`).join('')}</select>`;
+const nameTaken = (name, exceptId) => products.some(p => p.id !== exceptId && nameKey(p.name) === nameKey(name));
+
+function addProductModal() {
+  openModal(`<h3>새 상품 등록</h3>
+    <div class="field"><label>상품명 (시트에 이 이름으로 적힙니다)</label><input id="mName" placeholder="예) 녹차 음료"></div>
+    <div class="field-row">
+      <div class="field"><label>분류</label>${catSelect('음료')}</div>
+      <div class="field"><label>판매가 (원)</label><input id="mPrice" inputmode="numeric" placeholder="예) 3,000"></div>
+    </div>
+    <div class="field"><label>처음 재고 (개)</label><input id="mStock" inputmode="numeric" placeholder="0"></div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn green" id="mSave">등록</button></div>`);
+  moneyInput($('mPrice'));
+  $('mCancel').onclick = closeModal;
+  $('mSave').onclick = async () => {
+    const name = $('mName').value.replace(/\s+/g, ' ').trim();
+    if (!name) { toast('상품명을 입력하세요.', 'bad'); return; }
+    if (nameTaken(name)) { toast('같은 이름의 상품이 이미 있습니다. 시트에서 둘이 섞이므로 다른 이름을 쓰세요.', 'bad'); return; }
+    const price = moneyOf($('mPrice')), stock = parseInt(digits($('mStock').value), 10) || 0;
+    const ref = doc(productsCol);
+    const p = { id: ref.id, name, category: $('mCat').value, price, stock, sold: 0, createdAt: Date.now() };
+    try {
+      const batch = writeBatch(db);
+      batch.set(ref, { name, category: p.category, price, stock, sold: 0, createdAt: p.createdAt });
+      let op = null;
+      if (stock > 0) op = stockMove(batch, { product: p, kind: L.KIND.IN, qty: stock, note: '처음 등록', reason: '등록', before: 0, after: stock });
+      else batch.set(doc(logsCol), logEntry({ bookId: p.id, title: name, reason: '등록', before: 0, after: 0 }));
+      await batch.commit();
+      if (op) queueOp(op);
+      closeModal(); toast(`${name} 등록`, 'good');
+    } catch (e) { console.error(e); toast('등록 실패 · 연결 확인', 'bad'); }
+  };
+  setTimeout(() => $('mName').focus(), 60);
+}
+function restockModal(p) {
+  openModal(`<h3>입고 · ${esc(p.name)}</h3>
+    <p class="desc">새로 만들어 온 개수를 적으세요. 지금 재고 ${p.stock}개에 더해지고, 시트에 '입고' 줄이 남습니다.</p>
+    <div class="field"><label>입고 수량 (개)</label><input id="mQty" inputmode="numeric" placeholder="예) 10"></div>
+    <div class="field"><label>메모 (선택)</label><input id="mNote" placeholder="예) 2차 생산분"></div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn green" id="mSave">입고</button></div>`);
+  $('mCancel').onclick = closeModal;
+  $('mSave').onclick = async () => {
+    const qty = parseInt(digits($('mQty').value), 10) || 0;
+    if (qty <= 0) { toast('입고 수량을 입력하세요.', 'bad'); return; }
+    try {
+      const batch = writeBatch(db);
+      batch.update(doc(productsCol, p.id), { stock: increment(qty) });
+      const op = stockMove(batch, { product: p, kind: L.KIND.IN, qty, note: $('mNote').value.trim() || '입고', reason: '입고', before: p.stock, after: p.stock + qty });
+      await batch.commit();
+      queueOp(op);
+      closeModal(); toast(`${p.name} ${qty}개 입고`, 'good');
+    } catch (e) { console.error(e); toast('입고 실패 · 연결 확인', 'bad'); }
+  };
+  setTimeout(() => $('mQty').focus(), 60);
+}
+/* 실제로 세어 본 개수로 맞춘다. 차이만큼 시트에 '재고조정' 줄이 간다.
+   다른 기기에서 그 사이 팔렸어도 어긋나지 않게, 지금 값을 트랜잭션으로 다시 읽고 차이를 더한다. */
+function adjustModal(p) {
+  openModal(`<h3>재고 수정 · ${esc(p.name)}</h3>
+    <p class="desc">실제로 세어 본 개수를 적으세요. 지금 앱 재고는 <b>${p.stock}개</b>입니다. 차이만큼 시트에 '재고조정' 줄이 남습니다.</p>
+    <div class="field"><label>실제 개수</label><input id="mQty" inputmode="numeric" value="${p.stock}"></div>
+    <div class="field"><label>사유 (선택)</label><input id="mNote" placeholder="예) 실제 생산 수량, 파손"></div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn primary" id="mSave">저장</button></div>`);
+  $('mCancel').onclick = closeModal;
+  $('mSave').onclick = async () => {
+    const raw = digits($('mQty').value);
+    if (raw === '') { toast('개수를 입력하세요.', 'bad'); return; }
+    const want = parseInt(raw, 10);
+    const note = $('mNote').value.trim() || '재고 수정';
+    try {
+      const op = await runTransaction(db, async tr => {
+        const s = await tr.get(doc(productsCol, p.id));
+        if (!s.exists()) throw new Error('상품이 없습니다.');
+        const cur = s.data().stock || 0;
+        const delta = want - cur;
+        if (!delta) return null;
+        tr.update(doc(productsCol, p.id), { stock: want });
+        const time = new Date().toISOString();
+        const ref = doc(logsCol);
+        const rec = L.stockRecord({ title: p.name, qty: delta, kind: L.KIND.ADJ, note, time });
+        tr.set(ref, logEntry({ bookId: p.id, title: p.name, reason: '조정', before: cur, after: want, note, time, sheetKey: 'stock:' + ref.id, sheetRec: rec }));
+        return { key: 'stock:' + ref.id, op: 'rows', records: [rec] };
+      });
+      if (op) queueOp(op);
+      closeModal(); toast(op ? `${p.name} 재고 ${want}개로 수정` : '바뀐 것이 없습니다.', 'good');
+    } catch (e) { console.error(e); toast('저장 실패 · ' + (e.message || '연결 확인'), 'bad'); }
+  };
+  setTimeout(() => $('mQty').select(), 60);
+}
+/* 이름은 아직 팔거나 예약한 적이 없을 때만 바꾼다 — 지난 매출 줄의 이름까지 갈라지면 시트 요약이 둘로 쪼개진다.
+   바꾸면 시트의 그 상품 입고 줄 이름도 같이 바꾼다. 가격은 언제든 바꿔도 된다 (지난 줄은 그때 값 그대로). */
+function editProductModal(p) {
+  const used = transactions.some(t => (t.items || []).some(i => productOfItem(i) === p)) ||
+               preorders.some(o => (o.items || []).some(i => productOfItem(i) === p));
+  openModal(`<h3>상품 정보 · ${esc(p.name)}</h3>
+    <div class="field"><label>상품명 ${used ? '(판매·예약 기록이 있어 바꿀 수 없습니다)' : ''}</label>
+      <input id="mName" value="${esc(p.name)}" ${used ? 'disabled' : ''}></div>
+    <div class="field-row">
+      <div class="field"><label>분류</label>${catSelect(catOf(p))}</div>
+      <div class="field"><label>판매가 (원)</label><input id="mPrice" inputmode="numeric" value="${p.price ? fmt(p.price) : ''}" placeholder="예) 3,000"></div>
+    </div>
+    <div class="modal-actions" style="justify-content:space-between">
+      <button class="btn danger" id="mDel">삭제</button>
+      <span><button class="btn ghost" id="mCancel">취소</button> <button class="btn primary" id="mSave">저장</button></span>
+    </div>`);
+  moneyInput($('mPrice'));
+  $('mCancel').onclick = closeModal;
+  $('mDel').onclick = () => deleteProductModal(p, used);
+  $('mSave').onclick = async () => {
+    const name = used ? p.name : $('mName').value.replace(/\s+/g, ' ').trim();
+    const price = moneyOf($('mPrice'));
+    if (!name) { toast('상품명을 입력하세요.', 'bad'); return; }
+    if (nameTaken(name, p.id)) { toast('같은 이름의 상품이 이미 있습니다.', 'bad'); return; }
+    const renamed = name !== p.name;
+    try {
+      const batch = writeBatch(db);
+      batch.update(doc(productsCol, p.id), { name, category: $('mCat').value, price });
+      if (price !== p.price) batch.set(doc(logsCol), logEntry({ bookId: p.id, title: name, reason: '가격변경', note: `${won(p.price)} → ${won(price)}` }));
+      if (renamed) batch.set(doc(logsCol), logEntry({ bookId: p.id, title: name, reason: '이름변경', note: `${p.name} → ${name}` }));
+      await batch.commit();
+      if (renamed) queueOp({ key: 'rename:' + Date.now(), op: 'rename', from: p.name, to: name });
+      closeModal(); toast('저장했습니다.', 'good');
+    } catch (e) { console.error(e); toast('저장 실패 · 연결 확인', 'bad'); }
+  };
+}
+function deleteProductModal(p, used) {
+  if (used) { toast('판매·예약 기록이 있는 상품은 지울 수 없습니다. 재고를 0으로 수정하세요.', 'bad'); return; }
+  openModal(`<h3>상품 삭제 · ${esc(p.name)}</h3>
+    <div class="warn-box">상품과 그 입고 기록이 지워지고, <b>시트의 이 상품 입고 · 재고조정 줄도 지워집니다.</b></div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn solid-danger" id="mSave">삭제</button></div>`);
+  $('mCancel').onclick = closeModal;
+  $('mSave').onclick = async () => {
+    try {
+      await deleteDoc(doc(productsCol, p.id));
+      stockLogs.filter(l => l.bookId === p.id && l.sheetKey).forEach(l => queueOp({ key: 'del:' + l.sheetKey, op: 'delete', target: l.sheetKey }));
+      writeLogs([{ bookId: p.id, title: p.name, reason: '삭제', before: p.stock, after: 0 }]);
+      cart = cart.filter(c => c.id !== p.id);
+      closeModal(); toast('삭제했습니다.', 'good');
+    } catch (e) { console.error(e); toast('삭제 실패 · 연결 확인', 'bad'); }
+  };
+}
+function logModal(p) {
+  const list = (p ? stockLogs.filter(l => l.bookId === p.id) : stockLogs).slice(0, 300);
+  openModal(`<h3>🧾 변동 이력${p ? ' · ' + esc(p.name) : ''}</h3>
+    <div class="log-list" style="max-height:60vh;overflow:auto;border:1px solid var(--line);border-radius:var(--r-sm)">
+    ${list.length ? list.map(l => `<div class="log-row"><div><b>${esc(l.reason)}</b> ${p ? '' : esc(l.title)}
+      ${l.note ? `<div class="dim">${esc(l.note)}</div>` : ''}</div>
+      <div style="text-align:right;white-space:nowrap">${l.before != null && l.after != null ? `${l.before} → <b>${l.after}</b>` : ''}
+      <div class="dim">${fmtDateTime(l.time)}</div></div></div>`).join('') : '<div class="log-row dim">기록이 없습니다.</div>'}
+    </div><div class="modal-actions"><button class="btn ghost" id="mCancel">닫기</button></div>`, true);
+  $('mCancel').onclick = closeModal;
+}
+
+/* ================= 매출 내역 ================= */
+const SALES_PAGE = 100;
+let salesShown = SALES_PAGE;
+function filteredTx() {
+  const q = nameKey($('qSales').value), from = $('fFrom').value, to = $('fTo').value;
+  const m = $('fMethod').value, ty = $('fType').value;
+  return transactions.filter(t => {
+    const d = ymd(new Date(t.time));
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    if (m && t.method !== m) return false;
+    if (ty === 'sale' && (t.type !== 'sale' || t.preorderId)) return false;
+    if (ty === 'preorder' && !t.preorderId) return false;
+    if (ty === 'return' && t.type !== 'return') return false;
+    if (q && ![t.customer, ...(t.items || []).map(i => i.title)].some(v => nameKey(v).includes(q))) return false;
+    return true;
+  });
+}
+function payPills(t) {
+  if (t.split) return `<div class="pay-lines"><span class="pill cash">현금 ${won(Math.abs(t.split.cash))}</span><span class="pill transfer">이체 ${won(Math.abs(t.split.transfer))}</span></div>`;
+  return `<span class="pill ${t.method === '현금' ? 'cash' : 'transfer'}">${esc(t.method)}</span>`;
+}
+function renderSales() {
+  const list = filteredTx();
+  const recs = list.flatMap(t => { try { return L.txRecords(t); } catch { return []; } });
+  const cash = sum(recs.map(r => Number(r.현금) || 0)), tr = sum(recs.map(r => Number(r.계좌이체) || 0));
+  $('salesCards').innerHTML = `<div class="stat hero"><div class="lbl">합계 (반품 차감)</div><div class="val green">${won(cash + tr)}</div></div>
+    <div class="stat"><div class="lbl">💵 현금</div><div class="val">${won(cash)}</div></div>
+    <div class="stat"><div class="lbl">💳 계좌이체</div><div class="val">${won(tr)}</div></div>
+    <div class="stat"><div class="lbl">건수</div><div class="val">${list.length}건</div></div>`;
+  $('salesCount').innerHTML = `<b>${list.length}건</b>`;
+  const body = $('salesBody');
+  body.innerHTML = '';
+  list.slice(0, salesShown).forEach(t => {
+    const ret = t.type === 'return';
+    const trEl = document.createElement('tr');
+    if (ret) trEl.className = 'row-return';
+    trEl.innerHTML = `<td data-label="일시">${fmtDateTime(t.time)}${ret ? ' <span class="pill warn">반품</span>' : ''}${t.preorderId ? ' <span class="pill mute">예약</span>' : ''}</td>
+      <td class="cell-main" data-label="상품">${(t.items || []).map(i => `${esc(i.title)} ×${i.qty}`).join(', ')}
+        ${t.discount > 0 ? `<div class="sub">할인 ${won(t.discount)}${t.discountLabel ? ' · ' + esc(t.discountLabel) : ''}</div>` : ''}
+        ${t.note && !ret ? `<div class="sub">${esc(t.note)}</div>` : ''}</td>
+      <td class="num" data-label="수량">${t.qty}</td>
+      <td class="num" data-label="금액"><b>${won(t.received)}</b></td>
+      <td class="center" data-label="결제">${payPills(t)}</td>
+      <td data-label="고객">${esc(t.customer || '')}</td>
+      <td class="center" data-label="관리">${!ret && returnable(t) > 0 ? '<button class="mini-btn" data-a="ret">반품</button>' : ''}<button class="mini-btn del" data-a="del">삭제</button></td>`;
+    const r = trEl.querySelector('[data-a=ret]');
+    if (r) r.onclick = () => { if (requireOpen('반품')) returnModal(t); };
+    trEl.querySelector('[data-a=del]').onclick = () => deleteTxModal(t);
+    body.appendChild(trEl);
+  });
+  if (!list.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">거래가 없습니다.</td></tr>';
+  $('salesMore').style.display = list.length > salesShown ? '' : 'none';
+}
+/* CSV 는 시트 '판매기록' 과 똑같은 줄로 낸다 — 같은 ledger.js 를 거친다 */
+function exportTxCsv(list, tag) {
+  const head = L.LEDGER_HEADERS;
+  const rows = [...list].reverse().flatMap(t => {
+    let recs; try { recs = L.txRecords(t); } catch { return []; }
+    return recs.map(r => head.map(h => h === '날짜' ? L.serialDateText(r.날짜) : h === '시각' ? L.serialTimeText(r.시각)
+      : h === '기록ID' ? 'tx:' + t.id : (r[h] ?? '')));
+  });
+  downloadCsv(`바자회_판매기록_${tag}.csv`, [head, ...rows]);
+}
+function downloadCsv(name, rows) {
+  const csv = rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  download(name, '﻿' + csv, 'text/csv;charset=utf-8;');
+}
+function download(name, content, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type }));
+  a.download = name.replace(/[\\/:*?"<>|]/g, '_');
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/* ================= 리포트 ================= */
+let period = 'session';
+function periodTx() {
+  if (period === 'session') return sessionTx();
+  if (period === 'all') return transactions;
+  const today = ymd(new Date());
+  const from = period === 'today' ? today : $('pFrom').value, to = period === 'today' ? today : $('pTo').value;
+  return transactions.filter(t => { const d = ymd(new Date(t.time)); return (!from || d >= from) && (!to || d <= to); });
+}
+function renderReport() {
+  const list = periodTx();
+  const recs = list.flatMap(t => { try { return L.txRecords(t); } catch { return []; } });
+  const n = (f, flt = () => true) => sum(recs.filter(flt).map(r => Number(r[f]) || 0));
+  $('rLabel').textContent = { session: '이번 영업 매출', today: '오늘 매출', all: '전체 매출', custom: '기간 매출' }[period];
+  $('rRevenue').textContent = won(n('금액'));
+  $('rCash').textContent = won(n('현금'));
+  $('rTransfer').textContent = won(n('계좌이체'));
+  $('rQty').textContent = n('수량') + '개';
+  $('rCount').textContent = list.filter(t => t.type === 'sale').length + '건';
+  $('rDisc').textContent = won(n('할인'));
+  $('rRefund').textContent = won(-n('금액', r => r.구분 === '반품'));
+  const by = new Map();
+  recs.forEach(r => {
+    const x = by.get(r.상품명) || { sold: 0, ret: 0, disc: 0, amt: 0 };
+    if (r.구분 === '판매') x.sold += r.수량; else x.ret -= r.수량;
+    x.disc += Number(r.할인) || 0; x.amt += Number(r.금액) || 0;
+    by.set(r.상품명, x);
+  });
+  const rows = [...by.entries()].sort((a, b) => b[1].amt - a[1].amt);
+  $('rankBody').innerHTML = rows.length ? rows.map(([name, x]) => `<tr><td class="cell-main" data-label="상품">${esc(name)}</td>
+    <td class="num" data-label="판매">${x.sold}</td><td class="num" data-label="반품">${x.ret || '-'}</td>
+    <td class="num" data-label="순 개수"><b>${x.sold - x.ret}</b></td><td class="num" data-label="할인">${x.disc ? won(x.disc) : '-'}</td>
+    <td class="num" data-label="매출"><b>${won(x.amt)}</b></td></tr>`).join('')
+    : '<tr class="empty-row"><td colspan="6">이 기간에 판매가 없습니다.</td></tr>';
+}
+
+/* ================= 개업 / 마감 ================= */
+const bizOpen = () => !!(session && session.open);
+function sessionTx() { return bizOpen() ? transactions.filter(t => t.time >= (session.openedAt || '')) : []; }
+function sessionStats() {
+  const list = sessionTx();
+  const recs = list.flatMap(t => { try { return L.txRecords(t); } catch { return []; } });
+  const returns = list.filter(t => t.type === 'return');
+  return {
+    revenue: sum(list.map(t => t.received || 0)),
+    cash: sum(recs.map(r => Number(r.현금) || 0)), transfer: sum(recs.map(r => Number(r.계좌이체) || 0)),
+    saleCount: list.length - returns.length, returnCount: returns.length,
+    returnAmount: sum(returns.map(t => t.received || 0)), qty: sum(list.map(t => t.qty || 0)),
+  };
+}
+function requireOpen(what) {
+  if (bizOpen()) return true;
+  toast(`마감된 상태입니다. 개업해야 ${what}할 수 있습니다.`, 'bad');
+  bizPeekedFor = null; renderBiz();
+  return false;
+}
+let bizPeekedFor = null;
+const bizStamp = () => (session && session.closedAt) || 'none';
+function lastClosingHtml() {
+  const last = closings[closings.length - 1];
+  if (!last) return '<span class="dim">아직 마감 기록이 없습니다.</span>';
+  return `<div>지난 영업 <b>${esc(last.bizDate || '')}</b></div>
+    <div class="dim">${last.openedAt ? fmtDateTime(last.openedAt) + ' 개업 · ' : ''}${fmtDateTime(last.closedAt)} 마감</div>
+    <div class="big">${won(last.revenue)}</div>
+    <div class="dim">현금 ${won(last.cash)} · 계좌이체 ${won(last.transfer)} · 판매 ${last.saleCount || 0}건</div>`;
+}
+function renderBiz() {
+  const open = bizOpen();
+  const chip = $('bizChip');
+  chip.className = 'biz-chip ' + (open ? 'on' : 'off');
+  chip.textContent = open ? '🟢 영업 중' : '🔴 마감됨';
+  $('bizLast').innerHTML = lastClosingHtml();
+  const show = sessionLoaded && !open && auth && auth.currentUser && bizPeekedFor !== bizStamp();
+  $('bizScreen').style.display = show ? 'flex' : 'none';
+}
+async function openBiz() {
+  const btn = $('bizOpenBtn');
+  btn.disabled = true; btn.textContent = '개업하는 중…';
+  const now = new Date();
+  try {
+    await setDoc(doc(db, 'meta', 'session'), { open: true, openedAt: now.toISOString(), openedBy: me(), bizDate: ymd(now), seq: ((session && session.seq) || 0) + 1 });
+    bizPeekedFor = null; chime();
+    toast('개업했습니다. 좋은 바자회 되세요!', 'good');
+  } catch (e) { console.error(e); toast('개업 실패 · 연결 확인', 'bad'); }
+  finally { btn.disabled = false; btn.textContent = '🔓 개업하기'; }
+}
+function closeBizModal() {
+  if (!bizOpen()) { bizPeekedFor = null; renderBiz(); return; }
+  const s = sessionStats();
+  const waiting = preorders.filter(o => !o.handed);
+  openModal(`<h3>🔒 마감하기</h3>
+    <div class="info-box"><b>${esc(session.bizDate || '')}</b> 영업 · ${fmtDateTime(session.openedAt)} 개업 → 지금 마감</div>
+    <div class="close-sum">
+      <div class="row"><span class="dim">💵 현금</span><span>${won(s.cash)}</span></div>
+      <div class="row"><span class="dim">💳 계좌이체</span><span>${won(s.transfer)}</span></div>
+      ${s.returnCount ? `<div class="row"><span class="dim">반품 ${s.returnCount}건</span><span>${won(s.returnAmount)}</span></div>` : ''}
+      <div class="row"><span class="dim">판매</span><span>${s.saleCount}건 · ${s.qty}개</span></div>
+      <div class="row total"><span>합계</span><span>${won(s.revenue)}</span></div>
+    </div>
+    ${waiting.length ? `<div class="warn-box"><b>아직 안 가져간 예약 ${waiting.length}건</b> — ${waiting.slice(0, 8).map(o => `#${o.no} ${esc(o.name)}`).join(', ')}${waiting.length > 8 ? ' …' : ''}</div>` : ''}
+    <div class="verify-box" id="setVerify"></div>
+    <div class="info-box">마감하면 헤더 매출이 0으로 돌아갑니다. 거래 기록 · 시트는 그대로 남습니다.</div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn primary" id="mSave">마감하기</button></div>`);
+  paintVerify();
+  verifySheet({ quiet: true });
+  $('mCancel').onclick = closeModal;
+  $('mSave').onclick = async () => {
+    const btn = $('mSave'); btn.disabled = true; btn.textContent = '마감 중…';
+    const now = new Date();
+    const rec = { seq: session.seq || 0, bizDate: session.bizDate || ymd(now), openedAt: session.openedAt || null, openedBy: session.openedBy || null,
+                  closedAt: now.toISOString(), closedBy: me(), ...sessionStats() };
+    try { await setDoc(doc(db, 'meta', 'session'), { open: false, closedAt: rec.closedAt, closedBy: rec.closedBy }, { merge: true }); }
+    catch (e) { console.error(e); btn.disabled = false; btn.textContent = '다시 시도'; toast('마감 실패 · 연결 확인', 'bad'); return; }
+    try { await setDoc(doc(db, 'meta', 'closings'), { list: arrayUnion(rec) }, { merge: true }); }
+    catch (e) { console.error('마감 요약 저장 실패 (마감 자체는 완료)', e); }
+    closeModal();
+    toast(`마감했습니다 · ${won(rec.revenue)}`, 'good');
+  };
+}
+function closingsModal() {
+  const rows = [...closings].reverse();
+  openModal(`<h3>📒 지난 마감 내역</h3>${rows.length ? `<div style="max-height:56vh;overflow:auto">${rows.map(c => `<div class="biz-last" style="margin-bottom:8px">
+    <div><b>${esc(c.bizDate || '')}</b> <span class="dim">${c.openedAt ? fmtDateTime(c.openedAt) + ' → ' : ''}${fmtDateTime(c.closedAt)}</span></div>
+    <div class="big">${won(c.revenue)}</div><div class="dim">현금 ${won(c.cash)} · 계좌이체 ${won(c.transfer)} · 판매 ${c.saleCount || 0}건 · ${c.qty || 0}개${c.returnCount ? ` · 반품 ${c.returnCount}건` : ''}</div>
+  </div>`).join('')}</div>` : '<div class="info-box">아직 마감 기록이 없습니다.</div>'}
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">닫기</button></div>`);
+  $('mCancel').onclick = closeModal;
+}
+function tickClock() {
+  const now = new Date();
+  const base = (bizOpen() && session.bizDate) ? new Date(session.bizDate + 'T00:00:00') : now;
+  $('today').textContent = `${ymd(base)}(${'일월화수목금토'[base.getDay()]})`;
+  $('clock').textContent = `${p2(now.getHours())}:${p2(now.getMinutes())}`;
+}
+
+/* ================= 설정 ================= */
+function paintVerify() {
+  const el = $('setVerify');
+  if (!el) return;
+  const s = sheetIssues();
+  const parts = [];
+  let cls = '';
+  if (!sheetCfg || !sheetCfg.url) {
+    cls = 'bad'; parts.push('구글 시트가 아직 연결되지 않았습니다. 아래 <b>🔗 시트 연동</b> 에서 주소와 토큰을 넣으세요.');
+  } else {
+    if (sheetStale()) { cls = 'bad'; parts.push(`⚠ <b>시트 스크립트가 옛 버전입니다</b> (배포 ${esc(sheetVersion)} · 필요 ${esc(L.MIRROR_VERSION)}). Apps Script 에 Code.gs 를 다시 붙여넣고 <b>배포 관리 → ✏️ → 새 버전</b> 을 하세요.`); }
+    parts.push(s.pending ? `못 보낸 기록 <b>${s.pending}건</b>${sheetLastError ? ` · 마지막 실패: ${esc(sheetLastError)}` : ''}` : '못 보낸 기록 없음');
+    if (s.rejected.length) { cls = 'bad'; parts.push(`⚠ <b>시트가 거절한 기록 ${s.rejected.length}건</b><div class="list">${s.rejected.slice(0, 5).map(x => `${esc(x.key)} — ${esc(x.err)}`).join('<br>')}</div>`); }
+    const c = sheetCheck;
+    if (verifying) parts.push('🔍 시트와 대조하는 중…');
+    else if (!c) parts.push('아직 대조하지 않았습니다.');
+    else if (c.waiting) parts.push(esc(c.waiting));
+    else if (c.error) { cls = 'bad'; parts.push(`대조 실패 · ${esc(c.error)}`); }
+    else if (c.ok) {
+      if (!cls) cls = 'ok';
+      parts.push(`✓ <b>시트와 앱이 완전히 같습니다</b> — 거래 ${c.txCount}건 · ${won(c.amount)} · 시트 ${c.rows}줄 (${new Date(c.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 확인)` +
+        (c.handRows ? `<br>※ 손으로 적은 줄 ${c.handRows}줄은 앱과 상관없이 시트 합계에 더해져 있습니다.` : ''));
+    } else {
+      cls = 'bad';
+      const lines = [
+        ...c.ledger.missing.map(k => `빠짐 · ${esc(k)}`), ...c.ledger.diff.map(d => `다름 · ${esc(d.key)} — ${esc(d.why)}`),
+        ...c.ledger.extra.map(k => `앱에 없음 · ${esc(k)}`), ...c.orders.missing.map(k => `예약 빠짐 · ${esc(k)}`),
+        ...c.orders.diff.map(d => `예약 다름 · ${esc(d.key)} — ${esc(d.why)}`), ...c.orders.extra.map(k => `예약 앱에 없음 · ${esc(k)}`),
+        ...(c.broken || []).map(b => `앱 기록 오류 · ${esc(b)}`),
+      ];
+      parts.push(`⚠ <b>시트와 앱이 다른 곳 ${lines.length}건</b> — <b>🛠 고치기</b> 를 누르면 앱 기록대로 시트를 맞춥니다.<div class="list">${lines.slice(0, 40).join('<br>')}</div>`);
+    }
+  }
+  el.className = 'verify-box ' + cls;
+  el.innerHTML = parts.join('<br>');
+  const fix = $('setFix');
+  if (fix) fix.style.display = sheetCheck && sheetCheck.ledger && !sheetCheck.ok ? '' : 'none';
+}
+function settingsModal() {
+  openModal(`<h3>⚙ 설정</h3>
+    <div class="set-sec" style="border:none;margin-top:0;padding-top:0"><h4>영업</h4>
+      <div class="set-btns"><button class="btn ${bizOpen() ? 'primary' : 'green'}" id="sBiz">${bizOpen() ? '🔒 마감하기' : '🔓 개업하기'}</button>
+      <button class="btn ghost" id="sClosings">📒 지난 마감 내역</button></div></div>
+    <div class="set-sec"><h4>구글 시트</h4>
+      <div class="verify-box" id="setVerify"></div>
+      <div class="set-btns"><button class="btn ghost" id="sFlush">📤 지금 보내기</button>
+        <button class="btn primary" id="sVerify">🔍 시트 대조</button>
+        <button class="btn danger" id="setFix" style="display:none">🛠 고치기</button>
+        <button class="btn ghost" id="sCfg">🔗 시트 연동</button></div></div>
+    <div class="set-sec"><h4>데이터</h4>
+      <div class="set-btns"><button class="btn ghost" id="sBackup">💾 백업 받기</button>
+        <button class="btn ghost" id="sRestore">📂 백업 복원</button>
+        <button class="btn danger" id="sReset">🧨 전체 초기화</button></div></div>
+    <div class="set-sec"><div class="set-btns"><button class="btn ghost" id="sLogout">로그아웃 (${esc(me() || '')})</button></div></div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">닫기</button></div>`, true);
+  paintVerify();
+  $('sBiz').onclick = () => { if (bizOpen()) closeBizModal(); else { closeModal(); bizPeekedFor = null; renderBiz(); } };
+  $('sClosings').onclick = closingsModal;
+  $('sFlush').onclick = () => flushSheet(true);
+  $('sVerify').onclick = () => verifySheet();
+  $('setFix').onclick = fixSheet;
+  $('sCfg').onclick = sheetConfigModal;
+  $('sBackup').onclick = backupNow;
+  $('sRestore').onclick = () => $('restoreFile').click();
+  $('sReset').onclick = resetAll;
+  $('sLogout').onclick = async () => { closeModal(); await signOut(auth); location.reload(); };
+  $('mCancel').onclick = closeModal;
+  if (sheetCfg && sheetCfg.url) {
+    sheetPost({ action: 'ping' }).then(paintVerify).catch(e => { sheetLastError = e.message; paintVerify(); });
+    verifySheet({ quiet: true });
+  }
+}
+function sheetConfigModal() {
+  openModal(`<h3>🔗 시트 연동</h3>
+    <p class="desc">Apps Script 를 웹 앱으로 배포하고 받은 <b>/exec 주소</b>와 <b>토큰_만들기</b> 로 만든 토큰을 넣으세요.
+      이 값은 코드가 아니라 Firestore 에만 저장됩니다. (자세한 순서: <code>apps-script/Code.gs</code> 맨 위)</p>
+    <div class="field"><label>웹 앱 주소 (/exec)</label><input id="mUrl" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(sheetCfg?.url || '')}"></div>
+    <div class="field"><label>토큰</label><input id="mTok" value="${esc(sheetCfg?.token || '')}"></div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn ghost" id="mTest">연결 시험</button><button class="btn primary" id="mSave">저장</button></div>`);
+  const read = () => ({ url: $('mUrl').value.trim(), token: $('mTok').value.trim() });
+  $('mCancel').onclick = settingsModal;
+  $('mTest').onclick = async () => {
+    const prev = sheetCfg; sheetCfg = read();
+    try { const out = await sheetPost({ action: 'ping' }); toast(`✓ 연결됨 · "${out.sheet}" · 버전 ${out.version}${sheetStale() ? ' (옛 버전!)' : ''}`, sheetStale() ? 'bad' : 'good'); }
+    catch (e) { toast('연결 실패 · ' + e.message, 'bad'); }
+    finally { sheetCfg = prev; }
+  };
+  $('mSave').onclick = async () => {
+    const cfg = read();
+    if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(cfg.url)) { toast('주소는 https://script.google.com/…/exec 모양이어야 합니다.', 'bad'); return; }
+    if (!cfg.token) { toast('토큰을 넣으세요.', 'bad'); return; }
+    try {
+      await setDoc(doc(db, 'meta', 'sheet'), cfg);
+      sheetCfg = cfg;
+      toast('저장했습니다. 밀린 기록을 보냅니다.', 'good');
+      flushSheet(); scheduleVerify(8000);
+      settingsModal();
+    } catch (e) { console.error(e); toast('저장 실패 · 연결 확인', 'bad'); }
+  };
+}
+async function backupNow() {
+  try {
+    const grab = async col => (await getDocs(col)).docs.map(d => ({ id: d.id, ...d.data() }));
+    const dump = { app: 'bazaar-pos', at: new Date().toISOString(), products: await grab(productsCol), transactions: await grab(txCol),
+      preorders: await grab(ordersCol), stockLogs: await grab(logsCol), session, closings };
+    download(`바자회POS_백업_${ymd(new Date())}_${p2(new Date().getHours())}${p2(new Date().getMinutes())}.json`, JSON.stringify(dump, null, 1), 'application/json');
+    toast('백업 파일을 받았습니다.', 'good');
+  } catch (e) { console.error(e); toast('백업 실패 · 연결 확인', 'bad'); }
+}
+async function wipe(col) {
+  const snap = await getDocs(col);
+  for (let i = 0; i < snap.docs.length; i += 400) {
+    const b = writeBatch(db);
+    snap.docs.slice(i, i + 400).forEach(d => b.delete(d.ref));
+    await b.commit();
+  }
+}
+async function writeAll(col, list) {
+  for (let i = 0; i < list.length; i += 400) {
+    const b = writeBatch(db);
+    list.slice(i, i + 400).forEach(({ id, ...rest }) => b.set(doc(col, id), rest));
+    await b.commit();
+  }
+}
+function restoreFromFile(file) {
+  const r = new FileReader();
+  r.onload = () => {
+    let dump;
+    try { dump = JSON.parse(r.result); } catch { toast('백업 파일을 읽지 못했습니다.', 'bad'); return; }
+    if (dump.app !== 'bazaar-pos') { toast('바자회 POS 백업 파일이 아닙니다.', 'bad'); return; }
+    confirmModal({ title: '📂 백업 복원', keyword: '복원',
+      warn: `지금 앱의 상품 · 거래 · 예약 · 이력이 <b>${fmtDateTime(dump.at)}</b> 백업으로 바뀝니다.<br>복원한 뒤 설정의 <b>🔍 시트 대조 → 🛠 고치기</b> 로 시트도 맞추세요.`,
+      okLabel: '복원', onOk: async () => {
+        try {
+          for (const [col, key] of [[productsCol, 'products'], [txCol, 'transactions'], [ordersCol, 'preorders'], [logsCol, 'stockLogs']]) {
+            await wipe(col); await writeAll(col, dump[key] || []);
+          }
+          closeModal(); toast('복원했습니다. 시트 대조를 해 주세요.', 'good');
+        } catch (e) { console.error(e); toast('복원 실패 · ' + e.message, 'bad'); }
+      } });
+  };
+  r.readAsText(file);
+}
+/* 시험 판매를 지우고 처음부터 — 앱 데이터와 시트의 앱 줄을 같이 비운다.
+   시트를 못 비우면(연결 안 됨) 앱만 비우지 않고 멈춘다 — 둘이 어긋난 채로 시작하지 않게. */
+function resetAll() {
+  confirmModal({ title: '🧨 전체 초기화', keyword: '초기화',
+    warn: `모든 <b>판매 · 반품 · 예약 · 재고 이력 · 마감 기록</b>이 지워지고 처음 상품 ${SEED_PRODUCTS.length}종(가격 0원 · 예상 수량)만 남습니다.<br>
+      ${sheetCfg && sheetCfg.url ? '구글 시트의 <b>앱이 적은 줄도 같이 지워집니다</b> (손으로 적은 줄과 요약 수식은 남음).' : '시트는 연결돼 있지 않아 건드리지 않습니다.'}<br>
+      바자회 전에 시험한 기록을 지울 때 쓰세요. 먼저 💾 백업을 받아 두면 안전합니다.`,
+    okLabel: '전체 초기화', onOk: async () => {
+      try {
+        if (sheetCfg && sheetCfg.url) await sheetPost({ action: 'reset' });
+        for (const col of [qCol, txCol, ordersCol, logsCol, productsCol]) await wipe(col);
+        for (const id of ['init', 'session', 'closings', 'counters', 'sheetFlush']) await deleteDoc(doc(db, 'meta', id));
+        qRemote = new Map(); sheetCheck = null; cart = [];
+        await seedIfNeeded();
+        closeModal(); toast('초기화했습니다.', 'good');
+      } catch (e) { console.error(e); toast('초기화 실패 · ' + e.message, 'bad'); }
+    } });
+}
+
+/* ================= 공용 화면 조각 ================= */
+const overlay = $('overlay'), modal = $('modal');
+function openModal(html, wide = false) { modal.innerHTML = html; modal.classList.toggle('wide', wide); overlay.classList.add('show'); }
+function closeModal() { overlay.classList.remove('show'); modal.classList.remove('wide'); }
+overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeSheet(); } });
+function confirmModal({ title, warn, keyword, okLabel, onOk }) {
+  openModal(`<h3>${title}</h3><div class="warn-box">${warn}<br><br>이 작업은 <b>되돌릴 수 없습니다.</b></div>
+    <div class="field"><label>계속하려면 <b>${keyword}</b> 라고 입력하세요</label><input id="cWord" autocomplete="off" placeholder="${keyword}"></div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn solid-danger" id="mSave" disabled>${okLabel}</button></div>`);
+  $('cWord').addEventListener('input', () => { $('mSave').disabled = $('cWord').value.trim() !== keyword; });
+  $('mCancel').onclick = closeModal;
+  $('mSave').onclick = () => { $('mSave').disabled = true; $('mSave').textContent = '처리 중…'; onOk(); };
+  setTimeout(() => $('cWord').focus(), 60);
+}
+let toastTimer;
+function toast(msg, type = '') {
+  const t = $('toast');
+  t.textContent = msg; t.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = type; }, msg.length > 40 ? 4200 : 2600);
+}
+/* 소리 — 파일 없이 짧게. 실패해도 판매에는 아무 영향이 없다. */
+let actx = null;
+function tone(freq, dur, when = 0, vol = 0.08) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.frequency.value = freq; o.type = 'sine';
+    g.gain.setValueAtTime(vol, actx.currentTime + when);
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + when + dur);
+    o.connect(g).connect(actx.destination);
+    o.start(actx.currentTime + when); o.stop(actx.currentTime + when + dur + 0.02);
+  } catch (e) {}
+}
+const beep = () => tone(1320, 0.07);
+const chime = () => { tone(880, 0.16); tone(1320, 0.22, 0.09); };
+
+/* 장바구니 판 (좁은 화면에서는 아래에서 올라온다) */
+let cartPinned = false, cartOpenedOnce = false;
+function showSheet() {
+  $('cartPane').classList.add('open');
+  if (window.matchMedia('(max-width: 899px)').matches) $('sheetBackdrop').classList.add('show');
+  else document.body.classList.add('cart-open');
+}
+function hideSheet() { $('cartPane').classList.remove('open'); $('sheetBackdrop').classList.remove('show'); document.body.classList.remove('cart-open'); }
+function openSheet() { cartPinned = true; cartOpenedOnce = true; showSheet(); renderActionBar(); }
+function closeSheet() { cartPinned = false; hideSheet(); renderActionBar(); }
+const currentView = () => (document.querySelector('.view.active') || {}).id || 'pos';
+function switchView(name) {
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === name));
+  if (name === 'pos') { if (cartPinned) showSheet(); } else hideSheet();
+  renderActionBar();
+}
+let barAction = null;
+function setBar(sub, main, label, onClick, disabled = false) {
+  $('mbQty').textContent = sub; $('mbAmt').textContent = main;
+  $('mbOpen').textContent = label; $('mbOpen').disabled = disabled;
+  barAction = onClick;
+}
+function renderActionBar() {
+  const v = currentView();
+  if (v === 'pos') {
+    const qty = sum(cart.map(c => c.qty));
+    const open = $('cartPane').classList.contains('open');
+    setBar(qty ? `담긴 상품 ${qty}개` : '담긴 상품 없음', won(payableAmount()), open ? '장바구니 닫기' : '장바구니',
+           () => (open ? closeSheet() : openSheet()), !cart.length);
+  } else if (v === 'preorder') {
+    const w = preorders.filter(o => !o.handed);
+    setBar(`수령 대기 ${w.length}건`, `${sum(w.map(L.orderQty))}개`, '＋ 예약', () => orderModal());
+  } else if (v === 'inventory') {
+    setBar(`상품 ${products.length}종`, `${sum(products.map(p => p.stock || 0))}개`, '＋ 상품', addProductModal);
+  } else if (v === 'sales') {
+    const list = filteredTx();
+    setBar(`${list.length}건`, won(sum(list.map(t => t.received || 0))), '⬇ CSV', () => $('exportCsv').click(), !list.length);
+  } else {
+    const list = periodTx();
+    setBar(`${$('rLabel').textContent} · ${list.length}건`, won(sum(list.map(t => t.received || 0))), '⬇ CSV', () => $('exportPeriodCsv').click(), !list.length);
+  }
+}
+
+/* ================= 이벤트 ================= */
+document.querySelectorAll('.tabs button').forEach(b => { b.onclick = () => switchView(b.dataset.view); });
+document.querySelectorAll('.pay-methods button').forEach(b => {
+  b.onclick = () => { selectPayMethod(b.dataset.method); if (b.dataset.method === '분할') $('splitCash').focus(); };
+});
+moneyInput($('splitCash'));
+$('splitCash').addEventListener('input', syncSplit);
+$('discount').addEventListener('input', e => {
+  if (discountMode === 'percent') {
+    let v = e.target.value.replace(/[^\d.]/g, '');
+    if ((parseFloat(v) || 0) > 100) v = '100';
+    e.target.value = v;
+  } else { const v = digits(e.target.value); e.target.value = v === '' ? '' : parseInt(v, 10).toLocaleString('ko-KR'); }
+  updateTotals();
+});
+function setDiscountMode(mode) {
+  discountMode = mode;
+  $('discModeAmt').classList.toggle('on', mode === 'amount');
+  $('discModePct').classList.toggle('on', mode === 'percent');
+  $('discUnit').textContent = mode === 'percent' ? '%' : '원';
+  $('discount').value = '';
+  updateTotals();
+}
+$('discModeAmt').onclick = () => setDiscountMode('amount');
+$('discModePct').onclick = () => setDiscountMode('percent');
+$('checkout').onclick = checkout;
+$('clearCart').onclick = clearCart;
+$('posReturnBtn').onclick = returnPickerModal;
+$('qProducts').addEventListener('input', renderGrid);
+$('addOrderBtn').onclick = () => orderModal();
+$('orderCsvBtn').onclick = exportOrdersCsv;
+['qOrders', 'onlyUnpaid', 'onlyWaiting'].forEach(id => $(id).addEventListener('input', renderPreorders));
+$('addProductBtn').onclick = addProductModal;
+$('allLogsBtn').onclick = () => logModal(null);
+$('settingsBtn').onclick = settingsModal;
+$('sheetChip').onclick = settingsModal;
+$('mbOpen').onclick = () => { if (barAction) barAction(); };
+$('sheetClose').onclick = closeSheet;
+$('sheetBackdrop').onclick = closeSheet;
+$('salesMore').onclick = () => { salesShown += SALES_PAGE; renderSales(); };
+['qSales', 'fFrom', 'fTo', 'fMethod', 'fType'].forEach(id => $(id).addEventListener('input', () => { salesShown = SALES_PAGE; renderSales(); renderActionBar(); }));
+$('fClear').onclick = () => { ['qSales', 'fFrom', 'fTo', 'fMethod', 'fType'].forEach(id => { $(id).value = ''; }); renderSales(); renderActionBar(); };
+$('exportCsv').onclick = () => exportTxCsv(filteredTx(), ymd(new Date()));
+$('exportPeriodCsv').onclick = () => exportTxCsv(periodTx(), $('rLabel').textContent.replace(/\s+/g, '_'));
+$('restoreFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) restoreFromFile(f); e.target.value = ''; });
+$('periodBar').querySelectorAll('button').forEach(b => {
+  b.onclick = () => {
+    if (b.dataset.p === 'custom' && (!$('pFrom').value || !$('pTo').value)) { toast('시작일과 종료일을 고르세요.', 'bad'); return; }
+    period = b.dataset.p;
+    $('periodBar').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    renderReport(); renderActionBar();
+  };
+});
+$('bizChip').onclick = () => { if (bizOpen()) closeBizModal(); else { bizPeekedFor = null; renderBiz(); } };
+$('bizOpenBtn').onclick = openBiz;
+$('bizPeekBtn').onclick = () => { bizPeekedFor = bizStamp(); renderBiz(); };
+
+function renderAll() {
+  renderCart();
+  renderPreorders();
+  renderInventory();
+  renderSales();
+  renderReport();
+  $('hdrRevenue').textContent = won(sum(sessionTx().map(t => t.received || 0)));
+  renderBiz();
+  renderActionBar();
+}
+
+/* ================= 로그인 ================= */
+const loginScreen = $('loginScreen');
+function showLoginError(msg) { loginScreen.style.display = 'flex'; $('loginError').textContent = msg || ''; }
+$('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('loginError').textContent = '';
+  $('loginBtn').disabled = true;
+  try { await signInWithEmailAndPassword(auth, $('loginEmail').value.trim(), $('loginPw').value); }
+  catch (err) { console.error(err); showLoginError(navigator.onLine ? '로그인 실패 · 이메일/비밀번호를 확인하세요.' : '인터넷에 연결되어 있지 않습니다.'); }
+  finally { $('loginBtn').disabled = false; }
+});
+
+if (!CONFIGURED) {
+  $('setupScreen').style.display = 'flex';
+  loginScreen.style.display = 'none';
+} else {
+  onAuthStateChanged(auth, async user => {
+    if (user && user.email === STORE_EMAIL) {
+      loginScreen.style.display = 'none';
+      $('loginPw').value = '';
+      startListeners();
+      seedIfNeeded();
+      loadSheetCfg();
+      renderBiz();
+    } else if (user) {
+      await signOut(auth);
+      showLoginError('허용되지 않은 계정입니다. 바자회 공용 계정으로 로그인하세요.');
+    } else {
+      loginScreen.style.display = 'flex';
+      $('bizScreen').style.display = 'none';
+    }
+  });
+}
+
+/* ================= 서비스워커 ================= */
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+            $('updateBar').classList.add('show');
+            $('updateNow').onclick = () => { nw.postMessage('SKIP_WAITING'); reg.waiting && reg.waiting.postMessage('SKIP_WAITING'); };
+          }
+        });
+      });
+    }).catch(e => console.error('sw', e));
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; location.reload(); } });
+  });
+}
+
+/* ================= 시작 ================= */
+(function init() {
+  tickClock();
+  setInterval(tickClock, 1000);
+  const t = new Date();
+  $('pFrom').value = ymd(t); $('pTo').value = ymd(t);
+  selectPayMethod('계좌이체');
+  renderSync();
+  renderAll();
+})();
+</script>
+</body>
+</html>
