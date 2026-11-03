@@ -30,7 +30,7 @@
  */
 
 /* 앱(ledger.js)의 MIRROR_VERSION 과 같아야 한다. 이 파일을 고치면 둘 다 올린다. */
-var MIRROR_VERSION = '2026-11-03a';
+var MIRROR_VERSION = '2026-11-03b';
 
 var LEDGER_TAB = '판매기록';
 var SUMMARY_TAB = '요약';
@@ -511,7 +511,9 @@ function makeSummary(ss) {
     ['💳 계좌이체', '=SUM(' + L + 'K2:K)', ''],
     ['할인 합계', '=SUM(' + L + 'G2:G)', ''],
     ['반품 금액', '=-SUMIFS(' + L + 'H2:H,' + L + 'D2:D,"반품")', ''],
-    ['판매 건수', '=IFERROR(COUNTUNIQUE(FILTER(' + L + 'O2:O,' + L + 'D2:D="판매")),0)', ''],
+    /* COUNTUNIQUE(FILTER(…)) 는 쓰지 않는다 — 판매가 0건이면 FILTER 가 #N/A 를 내는데 COUNTUNIQUE 가
+       그 오류를 값 하나로 세서 1 이 된다 (2026-11-03 시험 기록을 다 지운 뒤 실제로 1 로 남았다) */
+    ['판매 건수', '=COUNTUNIQUEIFS(' + L + 'O2:O,' + L + 'D2:D,"판매")', ''],
     ['판매 개수 (반품 차감)', '=SUMIFS(' + L + 'E2:E,' + L + 'D2:D,"판매")+SUMIFS(' + L + 'E2:E,' + L + 'D2:D,"반품")', ''],
     ['', '', ''],
     ['예약 건수', '=COUNTA(' + O + 'L2:L)', ''],

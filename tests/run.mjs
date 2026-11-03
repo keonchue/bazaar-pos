@@ -133,6 +133,13 @@ test('시트_만들기: 탭 · 머리글이 앱과 같다', () => {
   assert.ok(S.ss.getSheetByName('요약'));
   assert.equal(S.ss.tz, 'Asia/Seoul');
 });
+test('요약 수식에 0건일 때 1 이 되는 COUNTUNIQUE(FILTER(…)) 가 없다', () => {
+  const sum = S.ss.getSheetByName('요약');
+  const formulas = sum.rows.flat().filter(v => v && v.formula).map(v => v.formula);
+  assert.ok(formulas.length > 5);
+  assert.ok(!formulas.some(f => /COUNTUNIQUE\(\s*(IFERROR\()?FILTER/i.test(f)), formulas.join(' / '));
+  assert.ok(formulas.some(f => /COUNTUNIQUEIFS\(/.test(f)));
+});
 test('토큰이 틀리면 아무것도 안 적는다', () => {
   const out = S.post({ token: 'wrong', action: 'ops', ops: [rowsOp(SALES[0])] });
   assert.equal(out.ok, false);

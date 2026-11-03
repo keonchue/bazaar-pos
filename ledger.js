@@ -18,7 +18,7 @@
 
 /* Apps Script(apps-script/Code.gs)의 MIRROR_VERSION 과 같아야 한다.
    Code.gs 를 고치면 둘을 같이 올린다 — 앱이 다르면 '시트 스크립트를 새로 배포하세요' 라고 알린다. */
-export const MIRROR_VERSION = '2026-11-03a';
+export const MIRROR_VERSION = '2026-11-03b';
 
 export const LEDGER_TAB = '판매기록';
 export const ORDER_TAB = '예약';
