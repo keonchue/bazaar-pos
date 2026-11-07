@@ -110,6 +110,31 @@ const clean = s => String(s ?? '').replace(/\s+/g, ' ').trim().replace(/^'+\s*/,
      split     분할이면 { cash, transfer } (반품이면 둘 다 음수)
      setLabel  세트로 판 거래면 "2개 세트 · 6개 세트" — 할인이 0원이어도 비고에 남는다
      discountLabel  할인 칸(손으로 넣은 할인)의 사유 · note · customer · phone */
+/* ---------- 세트 할인 → 품목별 ----------
+   t.sets = [{ disc, picks: [{ bookId, title?, qty }] }] — 판매면 판 세트, 반품이면 돌려받은 세트.
+   세트 하나의 할인(disc)은 그 세트에 든 맛들에만, 맛 정가 비율로 나눈다.
+   돌려주는 것: 품목마다 { gross 정가, setDisc 세트 할인, after 세트 반영 금액 } 배열들. 세트가 없으면 setDisc 는 전부 0. */
+export function txSetSplit(t) {
+  const items = (t.items || []).filter(i => i && i.qty);
+  const gross = items.map(i => i.price * i.qty);
+  const setDisc = items.map(() => 0);
+  const used = items.map(() => 0);
+  (t.sets || []).forEach(s => {
+    const picks = (s.picks || []).filter(x => x && x.qty);
+    const idx = picks.map(x => items.findIndex(i => (x.bookId && i.bookId) ? i.bookId === x.bookId : clean(i.title) === clean(x.title)));
+    if (idx.some(k => k < 0)) throw new Error('세트에 든 상품을 거래 품목에서 찾지 못했습니다.');
+    picks.forEach((x, j) => { used[idx[j]] += x.qty; });
+    const d = s.disc || 0;
+    if (!isInt(d) || d < 0) throw new Error(`세트 할인이 올바르지 않습니다: ${d}`);
+    if (!d) return;
+    const w = picks.map((x, j) => items[idx[j]].price * x.qty);
+    if (d > sum(w)) throw new Error(`세트 할인(${d})이 세트 정가(${sum(w)})보다 큽니다.`);
+    allocate(d, w).forEach((v, j) => { setDisc[idx[j]] += v; });
+  });
+  items.forEach((i, k) => { if (used[k] > i.qty) throw new Error(`세트에 든 수량이 품목 수량보다 많습니다: ${clean(i.title)}`); });
+  return { gross, setDisc, after: gross.map((g, k) => g - setDisc[k]) };
+}
+
 export function txRecords(t) {
   const isReturn = t.type === 'return';
   const sgn = isReturn ? -1 : 1;
@@ -127,7 +152,11 @@ export function txRecords(t) {
   const paid = sgn * t.received;                      // 언제나 0 이상
   if (!isInt(paid) || paid < 0) throw new Error(`받은 금액이 올바르지 않습니다: ${t.received}`);
   if (paid > G) throw new Error(`받은 금액(${paid})이 정가 합계(${G})보다 큽니다.`);
-  const nets = allocate(paid, gross);
+  // 세트 할인은 그 세트에 든 맛 줄에만 먼저 빼고, 나머지 할인(할인 칸)은 세트 반영 후 금액에 비례해서 나눈다
+  const { setDisc: sd, after } = txSetSplit({ ...t, items });
+  const A = sum(after);
+  if (paid > A) throw new Error(`받은 금액(${paid})이 세트 값을 반영한 합계(${A})보다 큽니다.`);
+  const nets = allocate(paid, after);
 
   let cash, transfer;
   if (t.method === '현금') { cash = nets; transfer = nets.map(() => 0); }

@@ -283,6 +283,24 @@ test('6개 세트(고정가): 할인 0원이어도 비고에 세트 표시 · �
   assert.equal(orderRecord(o).주문내역.endsWith(' · 6개 세트'), true);
   assert.equal(orderRecord(o).금액, 33000);
 });
+test('세트 할인은 그 세트 맛에만 · 손 할인은 세트 반영 후 비율로 · 세트 반품도 맞는다', () => {
+  const items = [{ bookId: 'a', title: '딸기 요거트', qty: 1, price: 3000 }, { bookId: 'b', title: '귤 요거트', qty: 1, price: 3000 },
+    { bookId: 'c', title: '바나나 다크초코', qty: 1, price: 3000 }];
+  const sets = [{ size: 2, disc: 1000, picks: [{ bookId: 'a', qty: 1 }, { bookId: 'b', qty: 1 }] }];
+  const t = { type: 'sale', time: new Date(2026, 10, 8, 12).toISOString(), items, sets, total: 9000, discount: 1000, received: 8000, method: '현금', setLabel: '2개 세트' };
+  const r = txRecords(t);
+  assert.deepEqual(checkTxRecords(t, r), []);
+  assert.deepEqual(r.map(x => n0(x.할인)), [500, 500, 0], '낱개 바나나에는 할인이 없다');
+  const t2 = { ...t, discount: 1800, received: 7200, discountLabel: '봉사자' };   // 세트 1,000 + 할인 칸 800 (8,000 의 10%)
+  const r2 = txRecords(t2);
+  assert.deepEqual(r2.map(x => n0(x.금액)), [2250, 2250, 2700]);
+  const ret = { type: 'return', time: t.time, items: items.slice(0, 2), sets, total: -6000, discount: 0, received: -5000, method: '현금' };
+  const rr = txRecords(ret);
+  assert.deepEqual(checkTxRecords(ret, rr), []);
+  assert.deepEqual(rr.map(x => n0(x.금액)), [-2500, -2500]);
+  assert.throws(() => txRecords({ ...ret, received: -5500 }), /세트 값/);
+  assert.throws(() => txRecords({ ...t, sets: [{ disc: 500, picks: [{ bookId: 'zz', qty: 1 }] }] }), /찾지 못했/);
+});
 test('예약을 넣고 · 입금 · 수령을 바꾸면 같은 줄이 그 자리에서 바뀐다', () => {
   const o1 = mkOrder('O1'), o2 = mkOrder('O2', { name: '이두번' });
   send([orderOp(o1, 1), orderOp(o2, 2)]);

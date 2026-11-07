@@ -1726,10 +1726,9 @@ async function seedIfNeeded() {
       const rec = L.stockRecord({ title: s.name, qty: s.stock, kind: L.KIND.IN, note: '예상 수량 (처음 등록)', time });
       batch.set(doc(logsCol, logId), logEntry({ bookId: s.id, title: s.name, reason: '등록', before: 0, after: s.stock,
         note: '예상 수량 (처음 등록)', time, sheetKey: 'stock:' + logId, sheetRec: rec }));
-      ops.push({ key: 'stock:' + logId, op: 'rows', records: [rec] });
+      queueOp({ key: 'stock:' + logId, op: 'rows', records: [rec] }, batch);
     });
     await batch.commit();
-    ops.forEach(queueOp);
   } catch (e) { console.error('처음 상품 등록 실패', e); }
 }
 
@@ -1779,10 +1778,13 @@ const FLUSH_OWNER = Math.random().toString(36).slice(2, 10);
 const qDocId = key => String(key).replace(/\//g, '_');
 const sheetQueue = () => [...qRemote.values()].sort((a, b) => (a.at || 0) - (b.at || 0));
 
-function queueOp(op) {
+/* w(batch · 트랜잭션)를 주면 큐 칸을 그 쓰기 안에 같이 넣는다 → 판매가 저장될 때만 큐도 생긴다 (둘 중 하나만 남는 일이 없다).
+   큐는 서버가 받아 준 칸만 시트로 보낸다 (아래 startSheetQueue) — 저장이 거절되면 시트에도 안 간다. */
+function queueOp(op, w = null) {
   if (!db) return;
   if (qRemote.has(op.key)) return;
   const it = JSON.parse(JSON.stringify({ ...op, at: Date.now() + (qSeq++ % 1000) / 1000, by: me() }));
+  if (w) { w.set(doc(qCol, qDocId(it.key)), it); return; }
   qRemote.set(it.key, it);
   qEpoch++;
   setDoc(doc(qCol, qDocId(it.key)), it).catch(e => {
@@ -1801,9 +1803,10 @@ function dropQ(keys) {
 function startSheetQueue() {
   if (qStarted) return;
   qStarted = true;
-  onSnapshot(qCol, snap => {
+  onSnapshot(qCol, { includeMetadataChanges: true }, snap => {
     const m = new Map();
-    snap.docs.forEach(d => { const x = d.data(); if (x && x.key) m.set(x.key, x); });
+    // 아직 서버가 받지 않은 칸(이 기기에만 있는 것)은 보내지 않는다 — 판매 저장이 거절되면 같이 사라질 칸이다
+    snap.docs.forEach(d => { if (d.metadata.hasPendingWrites) return; const x = d.data(); if (x && x.key) m.set(x.key, x); });
     qRemote = m;
     qSeen = true;
     qEpoch++;
@@ -1814,9 +1817,9 @@ function startSheetQueue() {
 
 /* 예약 한 줄 — 바뀔 때마다 지금 모습 전체를 보낸다. rev 는 시각이라 늦게 도착한 옛 모습은 시트가 버린다. */
 let revSeq = 0;
-function queueOrder(o) {
+function queueOrder(o, w = null) {
   const rev = Date.now() * 100 + (revSeq++ % 100);
-  queueOp({ key: `order:${o.id}:${rev}`, op: 'order', id: o.id, rev, record: L.orderRecord(o) });
+  queueOp({ key: `order:${o.id}:${rev}`, op: 'order', id: o.id, rev, record: L.orderRecord(o) }, w);
 }
 
 /* Code.gs 를 고치면 ledger.js 의 MIRROR_VERSION 과 같이 올린다 — 다르면 설정에 경고가 뜬다 */
@@ -2326,6 +2329,27 @@ function setModal(deal) {
   };
 }
 
+/* 저장이 거절된 경우 (예: 그 사이 다른 기기에서 상품을 지움 · 로그인이 풀림).
+   판매도 시트 큐도 같이 거절됐으므로 기록은 아무 데도 없다 — 화면을 막고 크게 알리고, 결제면 장바구니를 되살린다. */
+function saveFailed(what, t, e, again = null) {
+  console.error(what + ' 저장 거절', e);
+  tone(220, 0.35); tone(180, 0.45, 0.3);
+  openModal(`<h3>⚠ ${what} 기록이 저장되지 않았습니다</h3>
+    <div class="warn-box"><b>${fmtDateTime(t.time)} · ${(t.items || []).map(i => `${esc(i.title)} ×${i.qty}`).join(', ')} · ${won(Math.abs(t.received))}</b><br>
+      이 ${what} 기록은 앱과 시트 <b>어디에도 남지 않았습니다.</b> 손님 돈은 이미 오갔을 수 있으니 ${again ? '아래 버튼으로 장바구니를 되살려 다시 결제 완료를 누르세요' : '다시 처리해 주세요'}.</div>
+    <div class="dim" style="font-size:13px">원인: ${esc((e && (e.code || e.message)) || '알 수 없음')}</div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">닫기</button>${again ? '<button class="btn primary" id="mSave">장바구니 되살리기</button>' : ''}</div>`);
+  $('mCancel').onclick = closeModal;
+  if (again) $('mSave').onclick = () => {
+    if (cart.length) { toast('지금 장바구니를 먼저 비우거나 결제한 뒤 다시 누르세요.', 'bad'); return; }
+    cart = again.cart.filter(c => productById(c.id));
+    cartSets = again.cartSets;
+    $('customer').value = again.customer || '';
+    selectPayMethod(again.payMethod);
+    closeModal(); renderCart(); openSheet();
+    toast('장바구니를 되살렸습니다. 확인하고 다시 결제 완료를 누르세요.', 'good');
+  };
+}
 function clearCart() {
   cartSets = [];
   cart = [];
@@ -2379,8 +2403,9 @@ function checkout() {
   const batch = writeBatch(db);
   lines.forEach(l => batch.update(doc(productsCol, l.p.id), { stock: increment(-l.qty), sold: increment(l.qty) }));
   batch.set(ref, t);
-  batch.commit().catch(e => { console.error(e); toast('결제 저장 실패 · 연결 확인', 'bad'); });
-  queueOp({ key: 'tx:' + ref.id, op: 'rows', records: chk.recs });
+  queueOp({ key: 'tx:' + ref.id, op: 'rows', records: chk.recs }, batch);
+  const again = { cart: JSON.parse(JSON.stringify(cart)), cartSets: JSON.parse(JSON.stringify(cartSets)), payMethod, customer: $('customer').value };
+  batch.commit().catch(e => saveFailed('결제', t, e, again));
   writeLogs(lines.map(l => ({ bookId: l.p.id, title: l.p.name, reason: '판매', before: l.p.stock, after: l.p.stock - l.qty, txId: ref.id })));
   chime();
   const how = t.split ? `현금 ${won(t.split.cash)} · 계좌이체 ${won(t.split.transfer)}` : payMethod;
@@ -2392,14 +2417,24 @@ function checkout() {
    품목별로 몇 개 돌려받는지 고르면, 그 몫의 실제 받은 돈(할인 반영)을 환불 금액으로 채워 준다.
    '다시 팔 수 있음' 을 끄면 재고는 그대로 두고 시트에는 '재고조정 −n (반품 후 폐기)' 줄을 같이 남긴다 —
    그래야 시트 요약의 남은 재고가 앱과 맞는다. */
-function returnedMap(t) {
-  const m = {};
-  transactions.forEach(r => {
-    if (r.type === 'return' && r.refId === t.id) (r.items || []).forEach(i => { m[i.title] = (m[i.title] || 0) + i.qty; });
+/* 이 결제에서 아직 돌려받지 않은 것 — 세트(통째로만) 와 낱개.
+   세트 하나만 바꾸고 싶으면 그 세트를 통째로 반품하고 새로 결제한다 (세트 할인을 반쯤 들고 가는 일이 없게). */
+const itemIdx = (items, x) => items.findIndex(i => (x.bookId && i.bookId) ? i.bookId === x.bookId : nameKey(i.title) === nameKey(x.title));
+function returnState(t) {
+  const kids = transactions.filter(r => r.type === 'return' && r.refId === t.id);
+  const items = (t.items || []).filter(i => i && i.qty);
+  const doneSets = new Set(kids.flatMap(r => r.setIdx || []));
+  const inSets = items.map(() => 0), retLoose = items.map(() => 0);
+  (t.sets || []).forEach(st => (st.picks || []).forEach(x => { const k = itemIdx(items, x); if (k >= 0) inSets[k] += x.qty; }));
+  kids.forEach(r => {
+    (r.items || []).forEach(ri => { const k = itemIdx(items, ri); if (k >= 0) retLoose[k] += ri.qty; });
+    (r.sets || []).forEach(st => (st.picks || []).forEach(x => { const k = itemIdx(items, x); if (k >= 0) retLoose[k] -= x.qty; }));
   });
-  return m;
+  const sets = (t.sets || []).map((st, j) => ({ st, j })).filter(x => !doneSets.has(x.j));
+  const loose = items.map((i, k) => ({ i, k, max: i.qty - inSets[k] - retLoose[k] })).filter(x => x.max > 0);
+  return { items, sets, loose, fresh: !kids.length };
 }
-const returnable = t => { const m = returnedMap(t); return sum((t.items || []).map(i => i.qty - (m[i.title] || 0))); };
+const returnable = t => { const st = returnState(t); return st.sets.length + sum(st.loose.map(x => x.max)); };
 const methodText = t => t.split ? `현금 ${won(Math.abs(t.split.cash))} · 계좌이체 ${won(Math.abs(t.split.transfer))}` : (t.method === '분할' ? '분할결제' : t.method);
 
 function returnPickerModal() {
@@ -2419,14 +2454,19 @@ function returnPickerModal() {
 }
 function returnModal(t) {
   if (!t) return;
-  const done = returnedMap(t);
-  const recs = L.txRecords(t);                         // 품목마다 실제 받은 돈
-  const rows = (t.items || []).map((i, k) => ({ i, k, max: i.qty - (done[i.title] || 0), net: Number(recs[k].금액) || 0 }))
-    .filter(r => r.max > 0);
+  const st = returnState(t);
+  const split0 = L.txSetSplit(t);
+  const A = sum(split0.after);                          // 세트 값을 반영한 합 — 받은 돈은 이 위에서 할인 칸만큼 빠진 것
+  const setValue = s => sum((s.picks || []).map(x => { const k = itemIdx(st.items, x); return k >= 0 ? st.items[k].price * x.qty : 0; })) - (s.disc || 0);
   const isSplit = t.method === '분할';
   openModal(`<h3>반품 처리</h3>
     <p class="desc">${fmtDateTime(t.time)} · ${won(t.received)} · ${esc(methodText(t))}</p>
-    <div class="ret-list">${rows.map(r => `<div class="ret-row">
+    ${st.sets.length ? '<div class="info-box">세트는 <b>통째로만</b> 반품됩니다. 세트 안의 맛 하나만 바꾸려면 세트를 반품하고 새로 결제하세요.</div>' : ''}
+    <div class="ret-list">${st.sets.map(({ st: s, j }) => `<div class="ret-row">
+      <div><div class="ret-title">${s.size}개 세트</div><div class="ret-sub">${(s.picks || []).map(x => { const k = itemIdx(st.items, x); return esc(k >= 0 ? st.items[k].title : '?') + (x.qty > 1 ? ' ×' + x.qty : ''); }).join(', ')} · ${won(setValue(s))}</div></div>
+      <div class="ret-qty"><button type="button" data-a="dec">−</button>
+      <input class="rq" data-set="${j}" data-max="1" value="1" inputmode="numeric"><button type="button" data-a="inc">＋</button></div>
+    </div>`).join('')}${st.loose.map(r => `<div class="ret-row">
       <div><div class="ret-title">${esc(r.i.title)}</div><div class="ret-sub">${won(r.i.price)} · 반품 가능 ${r.max}개</div></div>
       <div class="ret-qty"><button type="button" data-a="dec">−</button>
       <input class="rq" data-k="${r.k}" data-max="${r.max}" value="${r.max}" inputmode="numeric"><button type="button" data-a="inc">＋</button></div>
@@ -2442,12 +2482,18 @@ function returnModal(t) {
     let q = parseInt(digits(inp.value), 10) || 0;
     q = Math.min(Math.max(q, 0), +inp.dataset.max);
     inp.value = q;
-    return { k: +inp.dataset.k, q };
+    return inp.dataset.set != null ? { set: +inp.dataset.set, q } : { k: +inp.dataset.k, q };
   });
-  const refundDefault = () => sum(picks().map(({ k, q }) => {
-    const r = rows.find(x => x.k === k);
-    return q === r.i.qty ? r.net : Math.floor(r.net * q / r.i.qty);
-  }));
+  // 처음 반품이고 전부 돌려받으면 받은 돈 그대로. 아니면 (세트 값 · 낱개 정가) × 받은 돈 / 세트 반영 합 — 할인 칸 몫만 비율로 뺀다
+  const refundDefault = () => {
+    const ps = picks();
+    const all = st.fresh && ps.every(x => x.q === (x.set != null ? 1 : st.loose.find(r => r.k === x.k).max));
+    if (all) return t.received;
+    return sum(ps.map(x => {
+      const v = x.set != null ? setValue(t.sets[x.set]) * x.q : st.items[x.k].price * x.q;
+      return A ? Math.floor(v * t.received / A) : 0;
+    }));
+  };
   const paint = () => {
     const amt = refundDefault();
     if (isSplit) {
@@ -2475,10 +2521,16 @@ function returnModal(t) {
   $('mSave').onclick = () => {
     const ps = picks().filter(p => p.q > 0);
     if (!ps.length) { toast('반품할 수량을 고르세요.', 'bad'); return; }
-    const items = ps.map(({ k, q }) => ({ ...t.items[k], qty: q }));
+    const qty = st.items.map(() => 0);
+    const chosen = ps.filter(x => x.set != null).map(x => ({ j: x.set, s: t.sets[x.set] }));
+    chosen.forEach(({ s }) => (s.picks || []).forEach(x => { const k = itemIdx(st.items, x); if (k >= 0) qty[k] += x.qty; }));
+    ps.filter(x => x.set == null).forEach(x => { qty[x.k] += x.q; });
+    const items = st.items.map((i, k) => ({ ...i, qty: qty[k] })).filter(i => i.qty > 0);
+    const rSets = chosen.map(({ s }) => ({ size: s.size, disc: s.disc || 0, price: s.price ?? null, picks: s.picks }));
     const gross = sum(items.map(i => i.price * i.qty));
+    const cap = sum(L.txSetSplit({ items, sets: rSets }).after);
     const refund = refundTotal();
-    if (refund > gross) { toast(`환불 금액은 정가 합계(${won(gross)})를 넘을 수 없습니다.`, 'bad'); return; }
+    if (refund > cap) { toast(`환불 금액은 ${won(cap)}${cap < gross ? ' (세트 값 반영)' : ''} 를 넘을 수 없습니다.`, 'bad'); return; }
     let method = t.method, split = null;
     if (isSplit) {
       const c = moneyOf($('mRefundCash')), tr = moneyOf($('mRefundTr'));
@@ -2489,8 +2541,9 @@ function returnModal(t) {
     const r = {
       type: 'return', refId: t.id, time: new Date().toISOString(), items,
       qty: -sum(items.map(i => i.qty)), total: -gross, discount: 0, received: -refund, method, split,
-      customer: t.customer || null, phone: t.phone || null, note: restock ? '반품' : '반품 · 폐기', restock, by: me(),
-      disposeKeys: [],
+      customer: t.customer || null, phone: t.phone || null, note: (restock ? '반품' : '반품 · 폐기') + (rSets.length ? ' · ' + rSets.map(x => x.size + '개 세트').join(' · ') : ''),
+      restock, by: me(), disposeKeys: [],
+      sets: rSets.length ? rSets : null, setIdx: chosen.map(x => x.j),
     };
     const chk = checkedRecords(r);
     if (chk.error) { toast('⚠ 반품을 저장하지 않았습니다 — ' + chk.error, 'bad'); return; }
@@ -2510,8 +2563,8 @@ function returnModal(t) {
       }
     });
     batch.set(ref, r);
-    batch.commit().catch(e => { console.error(e); toast('반품 저장 실패 · 연결 확인', 'bad'); });
-    ops.forEach(queueOp);
+    ops.forEach(op => queueOp(op, batch));
+    batch.commit().catch(e => saveFailed('반품', r, e));
     writeLogs(items.map(i => { const p = productOfItem(i); return p && restock ? { bookId: p.id, title: p.name, reason: '반품',
       before: p.stock, after: p.stock + i.qty, txId: ref.id } : null; }).filter(Boolean));
     closeModal();
@@ -2550,9 +2603,9 @@ function deleteTxModal(t) {
       });
       batch.delete(doc(txCol, t.id));
       if (order) batch.update(doc(ordersCol, order.id), { handed: false, handedAt: null, txId: null });
+      ops.forEach(op => queueOp(op, batch));
+      if (order) queueOrder({ ...order, handed: false }, batch);
       await batch.commit();
-      ops.forEach(queueOp);
-      if (order) queueOrder({ ...order, handed: false });
       writeLogs((t.items || []).map(i => { const p = productOfItem(i); return p ? { bookId: p.id, title: p.name, reason: '기록 삭제',
         note: `${t.type === 'return' ? '반품' : '판매'} 기록 삭제`, txId: t.id } : null; }).filter(Boolean));
       closeModal();
@@ -2627,8 +2680,10 @@ async function togglePaid(o) {
   const paid = !o.paid;
   const patch = { paid, paidAt: paid ? new Date().toISOString() : null };
   try {
-    await updateDoc(doc(ordersCol, o.id), patch);
-    queueOrder({ ...o, ...patch });
+    const batch = writeBatch(db);
+    batch.update(doc(ordersCol, o.id), patch);
+    queueOrder({ ...o, ...patch }, batch);
+    await batch.commit();
     toast(paid ? `#${o.no} ${o.name} 입금 확인` : '입금 표시를 해제했습니다.', paid ? 'good' : '');
   } catch (e) { console.error(e); toast('저장 실패 · 연결 확인', 'bad'); }
 }
@@ -2653,7 +2708,7 @@ function orderModal(existing = null) {
   orderDraft = editing ? (existing.items || []).map(i => { const p = productOfItem(i); return p ? { id: p.id, qty: i.qty } : null; }).filter(Boolean) : [];
   // 세트 할인 — 판매 화면과 같은 묶음(2개 −1,000 · 3개 −2,000). 맛은 위에서 담은 낱개로 남고 몇 세트인지만 센다.
   const orderSets = new Map(SET_DEALS.map(d => [d.size, 0]));
-  if (editing) (existing.sets || []).forEach(s => { if (orderSets.has(s.size)) orderSets.set(s.size, s.n || 0); });
+  if (editing) (existing.sets || []).forEach(s => { if (orderSets.has(s.size)) orderSets.set(s.size, orderSets.get(s.size) + (s.n || 1)); });
   const v = k => (editing ? esc(existing[k] || '') : '');
   openModal(`<h3>${editing ? `예약 수정 · #${existing.no}` : '예약 받기'}</h3>
     <div class="field-row">
@@ -2763,30 +2818,62 @@ function orderModal(existing = null) {
     const paid = $('oPaidChk').checked;
     const patch = { name, phone: $('oPhone').value.trim() || null, note: $('oNote').value.trim() || null,
       method: $('oMethod').value, items, qty: sum(items.map(i => i.qty)),
-      sets: SET_DEALS.filter(d => orderSets.get(d.size) > 0).map(d => ({ size: d.size, n: orderSets.get(d.size),
-        ...(d.all ? { price: d.price, disc: allGross() - d.price } : { disc: d.disc }) })),
+      // 세트마다 어떤 맛이 들어가는지 정해서 남긴다 — 수령 때 세트 할인이 그 맛에만 나뉜다
+      sets: assignSetPicks(orderDraft.filter(d => flavorProds().some(p => p.id === d.id)),
+        SET_DEALS.filter(d => orderSets.get(d.size) > 0).map(d => ({ ...d, n: orderSets.get(d.size), disc: d.all ? allGross() - d.price : d.disc }))),
       discount: Math.min(setDisc(), sum(items.map(i => i.amount))), discountLabel: setLabel() || null,
       paid, paidAt: paid ? (existing?.paidAt || new Date().toISOString()) : null };
     patch.amount = sum(items.map(i => i.amount)) - patch.discount;
-    if (setNeed() > setQty()) { toast('세트 수에 비해 세트 맛이 모자랍니다.', 'bad'); return; }
+    if (setNeed() > setQty() || !patch.sets) { toast('세트 수에 비해 세트 맛이 모자랍니다.', 'bad'); return; }
     if (patch.discount < 0 || setDisc() < 0) { toast('세트 값이 맛 정가 합보다 큽니다 — 가격을 확인하세요.', 'bad'); return; }
     const btn = $('mSave'); btn.disabled = true; btn.textContent = '저장 중…';
     try {
       if (editing) {
-        await updateDoc(doc(ordersCol, existing.id), patch);
-        queueOrder({ ...existing, ...patch });
+        const batch = writeBatch(db);
+        batch.update(doc(ordersCol, existing.id), patch);
+        queueOrder({ ...existing, ...patch }, batch);
+        await batch.commit();
       } else {
         const no = await nextOrderNo();
         const ref = doc(ordersCol);
         const o = { ...patch, no, handed: false, handedAt: null, txId: null, time: new Date().toISOString(), createdAt: Date.now(), by: me() };
-        await setDoc(ref, o);
-        queueOrder({ id: ref.id, ...o });
+        const batch = writeBatch(db);
+        batch.set(ref, o);
+        queueOrder({ id: ref.id, ...o }, batch);
+        await batch.commit();
       }
       closeModal();
       toast(editing ? '예약을 수정했습니다.' : `예약 등록 · ${name} ${patch.qty}개`, 'good');
     } catch (e) { console.error(e); btn.disabled = false; btn.textContent = '다시 시도'; toast('저장 실패 · 연결 확인', 'bad'); }
   };
   setTimeout(() => $('oName').focus(), 60);
+}
+/* 예약 세트의 맛 정하기 — 6개 세트는 맛마다 1개, 2·3개 세트는 남은 맛 중 많이 남은 것부터 1개씩 (같으면 담은 순서).
+   lines: [{ id, qty }] 세트 맛 상품만,  specs: [{ size, disc, price?, all?, n }]
+   돌려주는 것: 세트 한 개씩 [{ size, disc, price?, picks: [{ bookId, qty }] }] — 맛이 모자라면 null */
+function assignSetPicks(lines, specs) {
+  const left = new Map(lines.map(l => [l.id, l.qty]));
+  const ids = lines.map(l => l.id);
+  const out = [];
+  const order = [...specs].sort((a, b) => (b.all ? 1 : 0) - (a.all ? 1 : 0) || b.size - a.size);
+  for (const sp of order) {
+    for (let k = 0; k < (sp.n || 1); k++) {
+      const picks = new Map();
+      if (sp.all) {
+        if (ids.length !== sp.size || ids.some(id => !(left.get(id) > 0))) return null;
+        ids.forEach(id => { left.set(id, left.get(id) - 1); picks.set(id, 1); });
+      } else {
+        for (let j = 0; j < sp.size; j++) {
+          const id = [...ids].sort((a, b) => left.get(b) - left.get(a))[0];
+          if (!(left.get(id) > 0)) return null;
+          left.set(id, left.get(id) - 1); picks.set(id, (picks.get(id) || 0) + 1);
+        }
+      }
+      out.push({ size: sp.size, disc: sp.disc || 0, ...(sp.price != null ? { price: sp.price } : {}),
+        picks: [...picks].map(([bookId, qty]) => ({ bookId, qty })) });
+    }
+  }
+  return out;
 }
 /* 수령 처리 — 여기서 비로소 재고가 줄고 매출이 잡힌다. 판매 화면과 똑같은 모양의 거래를 남긴다. */
 function pickupModal(o) {
@@ -2806,7 +2893,14 @@ function pickupModal(o) {
   $('mSave').onclick = async () => {
     const btn = $('mSave'); btn.disabled = true; btn.textContent = '처리 중…';
     const method = $('pMethod').value;
-    const t = { type: 'sale', time: new Date().toISOString(),
+    // 세트: 맛이 정해져 있으면 그대로, 예전 예약(세트 수만 있음)이면 지금 정한다. 할인 합이 예약 금액과 안 맞으면 세트 없이(비율로) 둔다
+    let sets = (o.sets || []).length ? o.sets : null;
+    if (sets && sets.some(x => !(x.picks || []).length)) {
+      const fl = (o.items || []).map(i => ({ id: i.bookId, qty: i.qty, p: productOfItem(i) })).filter(x => x.id && x.p && SET_CATS.includes(catOf(x.p)));
+      sets = assignSetPicks(fl, sets.map(x => ({ size: x.size, disc: x.disc, price: x.price, all: x.size === 6 && x.price != null, n: x.n || 1 })));
+    }
+    if (sets && sum(sets.map(x => x.disc || 0)) !== L.orderDisc(o)) sets = null;
+    const t = { type: 'sale', time: new Date().toISOString(), sets,
       items: (o.items || []).map(i => ({ bookId: i.bookId || null, title: i.title, category: i.category || null, qty: i.qty, price: i.price })),
       qty: L.orderQty(o), total: L.orderGross(o), discount: L.orderDisc(o), discountPct: null, received: amt, method, split: null,
       setLabel: (o.sets || []).length ? (o.discountLabel || '세트') : null,
@@ -2822,9 +2916,9 @@ function pickupModal(o) {
       batch.set(ref, t);
       const patch = { handed: true, handedAt, txId: ref.id, paid: true, paidAt: o.paidAt || handedAt, method };   // 실제로 받은 수단으로
       batch.update(doc(ordersCol, o.id), patch);
+      queueOp({ key: 'tx:' + ref.id, op: 'rows', records: chk.recs }, batch);
+      queueOrder({ ...o, ...patch }, batch);
       await batch.commit();
-      queueOp({ key: 'tx:' + ref.id, op: 'rows', records: chk.recs });
-      queueOrder({ ...o, ...patch });
       writeLogs(lines.filter(l => l.p).map(l => ({ bookId: l.p.id, title: l.p.name, reason: '판매', before: l.p.stock,
         after: l.p.stock - l.i.qty, txId: ref.id, note: `예약 수령 #${o.no}` })));
       closeModal(); chime();
@@ -2842,8 +2936,10 @@ function deleteOrderModal(o) {
   $('mCancel').onclick = closeModal;
   $('mSave').onclick = async () => {
     try {
-      await deleteDoc(doc(ordersCol, o.id));
-      queueOp({ key: 'orderdel:' + o.id, op: 'orderdel', id: o.id });
+      const batch = writeBatch(db);
+      batch.delete(doc(ordersCol, o.id));
+      queueOp({ key: 'orderdel:' + o.id, op: 'orderdel', id: o.id }, batch);
+      await batch.commit();
       closeModal(); toast('예약을 삭제했습니다.', 'good');
     } catch (e) { console.error(e); toast('삭제 실패 · 연결 확인', 'bad'); }
   };
@@ -2996,8 +3092,8 @@ function addProductModal() {
       let op = null;
       if (stock > 0) op = stockMove(batch, { product: p, kind: L.KIND.IN, qty: stock, note: '처음 등록', reason: '등록', before: 0, after: stock });
       else batch.set(doc(logsCol), logEntry({ bookId: p.id, title: name, reason: '등록', before: 0, after: 0 }));
+      if (op) queueOp(op, batch);
       await batch.commit();
-      if (op) queueOp(op);
       closeModal(); toast(`${name} 등록`, 'good');
     } catch (e) { console.error(e); toast('등록 실패 · 연결 확인', 'bad'); }
   };
@@ -3017,8 +3113,8 @@ function restockModal(p) {
       const batch = writeBatch(db);
       batch.update(doc(productsCol, p.id), { stock: increment(qty) });
       const op = stockMove(batch, { product: p, kind: L.KIND.IN, qty, note: $('mNote').value.trim() || '입고', reason: '입고', before: p.stock, after: p.stock + qty });
+      queueOp(op, batch);
       await batch.commit();
-      queueOp(op);
       closeModal(); toast(`${p.name} ${qty}개 입고`, 'good');
     } catch (e) { console.error(e); toast('입고 실패 · 연결 확인', 'bad'); }
   };
@@ -3050,9 +3146,10 @@ function adjustModal(p) {
         const ref = doc(logsCol);
         const rec = L.stockRecord({ title: p.name, qty: delta, kind: L.KIND.ADJ, note, time });
         tr.set(ref, logEntry({ bookId: p.id, title: p.name, reason: '조정', before: cur, after: want, note, time, sheetKey: 'stock:' + ref.id, sheetRec: rec }));
-        return { key: 'stock:' + ref.id, op: 'rows', records: [rec] };
+        const q = { key: 'stock:' + ref.id, op: 'rows', records: [rec] };
+        queueOp(q, tr);
+        return q;
       });
-      if (op) queueOp(op);
       closeModal(); toast(op ? `${p.name} 재고 ${want}개로 수정` : '바뀐 것이 없습니다.', 'good');
     } catch (e) { console.error(e); toast('저장 실패 · ' + (e.message || '연결 확인'), 'bad'); }
   };
@@ -3088,22 +3185,26 @@ function editProductModal(p) {
       batch.update(doc(productsCol, p.id), { name, category: $('mCat').value, price });
       if (price !== p.price) batch.set(doc(logsCol), logEntry({ bookId: p.id, title: name, reason: '가격변경', note: `${won(p.price)} → ${won(price)}` }));
       if (renamed) batch.set(doc(logsCol), logEntry({ bookId: p.id, title: name, reason: '이름변경', note: `${p.name} → ${name}` }));
+      if (renamed) queueOp({ key: 'rename:' + Date.now(), op: 'rename', from: p.name, to: name }, batch);
       await batch.commit();
-      if (renamed) queueOp({ key: 'rename:' + Date.now(), op: 'rename', from: p.name, to: name });
       closeModal(); toast('저장했습니다.', 'good');
     } catch (e) { console.error(e); toast('저장 실패 · 연결 확인', 'bad'); }
   };
 }
 function deleteProductModal(p, used) {
   if (used) { toast('판매·예약 기록이 있는 상품은 지울 수 없습니다. 재고를 0으로 수정하세요.', 'bad'); return; }
+  // 재고가 남은 상품은 다른 기기 장바구니에 담겨 있을 수 있다 — 지우면 그 결제가 통째로 거절된다
+  if ((p.stock || 0) !== 0) { toast(`재고가 ${p.stock}개 남아 있어 지울 수 없습니다. 먼저 재고 수정으로 0개로 맞추세요.`, 'bad'); return; }
   openModal(`<h3>상품 삭제 · ${esc(p.name)}</h3>
     <div class="warn-box">상품과 그 입고 기록이 지워지고, <b>시트의 이 상품 입고 · 재고조정 줄도 지워집니다.</b></div>
     <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn solid-danger" id="mSave">삭제</button></div>`);
   $('mCancel').onclick = closeModal;
   $('mSave').onclick = async () => {
     try {
-      await deleteDoc(doc(productsCol, p.id));
-      stockLogs.filter(l => l.bookId === p.id && l.sheetKey).forEach(l => queueOp({ key: 'del:' + l.sheetKey, op: 'delete', target: l.sheetKey }));
+      const batch = writeBatch(db);
+      batch.delete(doc(productsCol, p.id));
+      stockLogs.filter(l => l.bookId === p.id && l.sheetKey).forEach(l => queueOp({ key: 'del:' + l.sheetKey, op: 'delete', target: l.sheetKey }, batch));
+      await batch.commit();
       writeLogs([{ bookId: p.id, title: p.name, reason: '삭제', before: p.stock, after: 0 }]);
       cart = cart.filter(c => c.id !== p.id);
       closeModal(); toast('삭제했습니다.', 'good');
