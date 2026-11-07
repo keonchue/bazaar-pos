@@ -2541,7 +2541,7 @@ function returnModal(t) {
     const r = {
       type: 'return', refId: t.id, time: new Date().toISOString(), items,
       qty: -sum(items.map(i => i.qty)), total: -gross, discount: 0, received: -refund, method, split,
-      customer: t.customer || null, phone: t.phone || null, note: (restock ? '반품' : '반품 · 폐기') + (rSets.length ? ' · ' + rSets.map(x => x.size + '개 세트').join(' · ') : ''),
+      customer: t.customer || null, phone: t.phone || null, note: restock ? '반품' : '반품 · 폐기',   // 세트 표시는 시트에서 세트 줄에만 붙는다 (ledger.js)
       restock, by: me(), disposeKeys: [],
       sets: rSets.length ? rSets : null, setIdx: chosen.map(x => x.j),
     };

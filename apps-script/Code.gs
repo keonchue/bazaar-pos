@@ -30,7 +30,7 @@
  */
 
 /* 앱(ledger.js)의 MIRROR_VERSION 과 같아야 한다. 이 파일을 고치면 둘 다 올린다. */
-var MIRROR_VERSION = '2026-11-03b';
+var MIRROR_VERSION = '2026-11-08a';
 
 var LEDGER_TAB = '판매기록';
 var SUMMARY_TAB = '요약';
@@ -527,7 +527,8 @@ function makeSummary(ss) {
   sh.getRange(3, 2, 11, 1).setNumberFormat('#,##0').setHorizontalAlignment('right');
 
   var top = 16;
-  var head = ['상품명', '입고', '재고조정', '판매', '반품', '남은 재고', '매출'];
+  // 할인 = 그 상품 줄의 할인 합(세트 할인 포함, 반품은 빠짐) → 판매 × 단가 − 할인 = 매출 이 한 줄에서 보인다
+  var head = ['상품명', '입고', '재고조정', '판매', '반품', '남은 재고', '할인', '매출'];
   sh.getRange(top - 1, 1).setValue('상품별').setFontWeight('bold');
   sh.getRange(top, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#eef2f9');
   var A = 'A' + (top + 1) + ':A';
@@ -541,8 +542,9 @@ function makeSummary(ss) {
   sh.getRange(top + 1, 5).setFormula('=ARRAYFORMULA(IF(' + A + '="",,-' + sumif('E', '반품') + '))');
   sh.getRange(top + 1, 6).setFormula('=ARRAYFORMULA(IF(' + A + '="",,B' + (top + 1) + ':B+C' + (top + 1) +
                                      ':C-D' + (top + 1) + ':D+E' + (top + 1) + ':E))');
-  sh.getRange(top + 1, 7).setFormula('=ARRAYFORMULA(IF(' + A + '="",,SUMIFS(' + L + 'H2:H,' + L + 'C2:C,' + A + ')))');
-  sh.getRange(top + 1, 7, 200, 1).setNumberFormat('#,##0');
+  sh.getRange(top + 1, 7).setFormula('=ARRAYFORMULA(IF(' + A + '="",,SUMIFS(' + L + 'G2:G,' + L + 'C2:C,' + A + ')))');
+  sh.getRange(top + 1, 8).setFormula('=ARRAYFORMULA(IF(' + A + '="",,SUMIFS(' + L + 'H2:H,' + L + 'C2:C,' + A + ')))');
+  sh.getRange(top + 1, 7, 200, 2).setNumberFormat('#,##0');
   sh.setColumnWidth(1, 170);
   sh.setColumnWidth(3, 90);
   sh.setFrozenRows(0);

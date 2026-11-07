@@ -18,7 +18,7 @@
 
 /* Apps Script(apps-script/Code.gs)의 MIRROR_VERSION 과 같아야 한다.
    Code.gs 를 고치면 둘을 같이 올린다 — 앱이 다르면 '시트 스크립트를 새로 배포하세요' 라고 알린다. */
-export const MIRROR_VERSION = '2026-11-03b';
+export const MIRROR_VERSION = '2026-11-08a';
 
 export const LEDGER_TAB = '판매기록';
 export const ORDER_TAB = '예약';
@@ -110,28 +110,51 @@ const clean = s => String(s ?? '').replace(/\s+/g, ' ').trim().replace(/^'+\s*/,
      split     분할이면 { cash, transfer } (반품이면 둘 다 음수)
      setLabel  세트로 판 거래면 "2개 세트 · 6개 세트" — 할인이 0원이어도 비고에 남는다
      discountLabel  할인 칸(손으로 넣은 할인)의 사유 · note · customer · phone */
-/* ---------- 세트 할인 → 품목별 ----------
-   t.sets = [{ disc, picks: [{ bookId, title?, qty }] }] — 판매면 판 세트, 반품이면 돌려받은 세트.
+/* ---------- 세트 → 시트 줄 나누기 ----------
+   t.sets = [{ size, disc, picks: [{ bookId, title?, qty }] }] — 판매면 판 세트, 반품이면 돌려받은 세트.
+   세트가 있는 거래는 한 상품이라도 '세트에 든 몫' 과 '낱개 몫' 을 다른 줄로 나눈다
+   (같은 상품이 2개 세트 · 6개 세트에 다 들어 있으면 세트 크기마다 한 줄). 비고 "2개 세트" 는 그 세트 줄에만 붙는다.
    세트 하나의 할인(disc)은 그 세트에 든 맛들에만, 맛 정가 비율로 나눈다.
-   돌려주는 것: 품목마다 { gross 정가, setDisc 세트 할인, after 세트 반영 금액 } 배열들. 세트가 없으면 setDisc 는 전부 0. */
+   세트가 없는 거래(예전 거래 포함)는 지금까지처럼 상품마다 한 줄. */
+const pickIdx = (items, x) => items.findIndex(i => (x.bookId && i.bookId) ? i.bookId === x.bookId : clean(i.title) === clean(x.title));
+export function txLines(t) {
+  const items = (t.items || []).filter(i => i && i.qty);
+  const sets = (t.sets || []).filter(Boolean);
+  if (!sets.length) return items.map((i, k) => ({ k, label: null, qty: i.qty, gross: i.price * i.qty, setDisc: 0 }));
+  const groups = items.map(() => new Map());            // 상품마다: 세트 크기 → { qty, setDisc }
+  const used = items.map(() => 0);
+  sets.forEach(st => {
+    const picks = (st.picks || []).filter(x => x && x.qty);
+    const idx = picks.map(x => pickIdx(items, x));
+    if (!picks.length || idx.some(k => k < 0)) throw new Error('세트에 든 상품을 거래 품목에서 찾지 못했습니다.');
+    const d = st.disc || 0;
+    if (!isInt(d) || d < 0) throw new Error(`세트 할인이 올바르지 않습니다: ${d}`);
+    const w = picks.map((x, j) => items[idx[j]].price * x.qty);
+    if (d > sum(w)) throw new Error(`세트 할인(${d})이 세트 정가(${sum(w)})보다 큽니다.`);
+    const share = allocate(d, w);
+    const label = `${st.size || sum(picks.map(x => x.qty))}개 세트`;
+    picks.forEach((x, j) => {
+      const g = groups[idx[j]];
+      const cur = g.get(label) || { qty: 0, setDisc: 0 };
+      cur.qty += x.qty; cur.setDisc += share[j];
+      g.set(label, cur);
+      used[idx[j]] += x.qty;
+    });
+  });
+  const out = [];
+  items.forEach((i, k) => {
+    if (used[k] > i.qty) throw new Error(`세트에 든 수량이 품목 수량보다 많습니다: ${clean(i.title)}`);
+    groups[k].forEach((v, label) => out.push({ k, label, qty: v.qty, gross: i.price * v.qty, setDisc: v.setDisc }));
+    if (i.qty - used[k] > 0) out.push({ k, label: null, qty: i.qty - used[k], gross: i.price * (i.qty - used[k]), setDisc: 0 });
+  });
+  return out;
+}
+/* 품목(상품)별로 다시 모은 것 — 화면(반품 한도 등)이 쓴다 */
 export function txSetSplit(t) {
   const items = (t.items || []).filter(i => i && i.qty);
   const gross = items.map(i => i.price * i.qty);
   const setDisc = items.map(() => 0);
-  const used = items.map(() => 0);
-  (t.sets || []).forEach(s => {
-    const picks = (s.picks || []).filter(x => x && x.qty);
-    const idx = picks.map(x => items.findIndex(i => (x.bookId && i.bookId) ? i.bookId === x.bookId : clean(i.title) === clean(x.title)));
-    if (idx.some(k => k < 0)) throw new Error('세트에 든 상품을 거래 품목에서 찾지 못했습니다.');
-    picks.forEach((x, j) => { used[idx[j]] += x.qty; });
-    const d = s.disc || 0;
-    if (!isInt(d) || d < 0) throw new Error(`세트 할인이 올바르지 않습니다: ${d}`);
-    if (!d) return;
-    const w = picks.map((x, j) => items[idx[j]].price * x.qty);
-    if (d > sum(w)) throw new Error(`세트 할인(${d})이 세트 정가(${sum(w)})보다 큽니다.`);
-    allocate(d, w).forEach((v, j) => { setDisc[idx[j]] += v; });
-  });
-  items.forEach((i, k) => { if (used[k] > i.qty) throw new Error(`세트에 든 수량이 품목 수량보다 많습니다: ${clean(i.title)}`); });
+  txLines(t).forEach(l => { setDisc[l.k] += l.setDisc; });
   return { gross, setDisc, after: gross.map((g, k) => g - setDisc[k]) };
 }
 
@@ -147,13 +170,14 @@ export function txRecords(t) {
     if (!isInt(i.price) || i.price < 0) throw new Error(`단가가 올바르지 않습니다: ${i.title} ${i.price}`);
     if (!clean(i.title)) throw new Error('상품명이 비어 있습니다.');
   });
-  const gross = items.map(i => i.price * i.qty);
-  const G = sum(gross);
+  const G = sum(items.map(i => i.price * i.qty));
   const paid = sgn * t.received;                      // 언제나 0 이상
   if (!isInt(paid) || paid < 0) throw new Error(`받은 금액이 올바르지 않습니다: ${t.received}`);
   if (paid > G) throw new Error(`받은 금액(${paid})이 정가 합계(${G})보다 큽니다.`);
-  // 세트 할인은 그 세트에 든 맛 줄에만 먼저 빼고, 나머지 할인(할인 칸)은 세트 반영 후 금액에 비례해서 나눈다
-  const { setDisc: sd, after } = txSetSplit({ ...t, items });
+  // 세트 할인은 그 세트 줄에만 먼저 빼고, 나머지 할인(할인 칸)은 세트 반영 후 금액에 비례해서 나눈다
+  const lines = txLines({ ...t, items });
+  const gross = lines.map(l => l.gross);
+  const after = lines.map(l => l.gross - l.setDisc);
   const A = sum(after);
   if (paid > A) throw new Error(`받은 금액(${paid})이 세트 값을 반영한 합계(${A})보다 큽니다.`);
   const nets = allocate(paid, after);
@@ -172,25 +196,35 @@ export function txRecords(t) {
     throw new Error(`결제방식이 올바르지 않습니다: ${t.method}`);
   }
 
-  const memo = [];
-  if (!isReturn && clean(t.setLabel)) memo.push(clean(t.setLabel));
-  if (!isReturn && (t.discount || 0) > 0 && (clean(t.discountLabel) || !clean(t.setLabel))) memo.push(clean(t.discountLabel) || '할인');
-  if (t.note) memo.push(clean(t.note));
+  const hasSets = (t.sets || []).some(Boolean);
+  const memoOf = l => {
+    const m = [];
+    if (hasSets) {
+      if (l.label) m.push(l.label);                                   // 세트 줄에만
+      if (!isReturn && (t.discount || 0) > 0 && clean(t.discountLabel)) m.push(clean(t.discountLabel));
+    } else {                                                          // 예전 방식 그대로 (시트 대조가 옛 줄과 맞게)
+      if (!isReturn && clean(t.setLabel)) m.push(clean(t.setLabel));
+      if (!isReturn && (t.discount || 0) > 0 && (clean(t.discountLabel) || !clean(t.setLabel))) m.push(clean(t.discountLabel) || '할인');
+    }
+    if (t.note) m.push(clean(t.note));
+    return m.join(' · ');
+  };
   const base = {
     날짜: serialDate(d), 시각: serialTime(d),
     구분: isReturn ? KIND.RETURN : KIND.SALE,
     결제방식: t.method,
-    고객명: clean(t.customer), 연락처: clean(t.phone), 비고: memo.join(' · '),
+    고객명: clean(t.customer), 연락처: clean(t.phone),
   };
-  return items.map((i, k) => ({
+  return lines.map((l, j) => ({
     ...base,
-    상품명: clean(i.title),
-    수량: sgn * i.qty,
-    단가: i.price,
-    할인: blank0(sgn * (gross[k] - nets[k])),
-    금액: sgn * nets[k],
-    현금: blank0(sgn * cash[k]),
-    계좌이체: blank0(sgn * transfer[k]),
+    상품명: clean(items[l.k].title),
+    수량: sgn * l.qty,
+    단가: items[l.k].price,
+    할인: blank0(sgn * (gross[j] - nets[j])),
+    금액: sgn * nets[j],
+    현금: blank0(sgn * cash[j]),
+    계좌이체: blank0(sgn * transfer[j]),
+    비고: memoOf(l),
   })).map(r => ({ ...r, 수량: r.수량 || 0, 금액: r.금액 || 0 }));
 }
 

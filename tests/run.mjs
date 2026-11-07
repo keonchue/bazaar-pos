@@ -301,6 +301,25 @@ test('세트 할인은 그 세트 맛에만 · 손 할인은 세트 반영 후 �
   assert.throws(() => txRecords({ ...ret, received: -5500 }), /세트 값/);
   assert.throws(() => txRecords({ ...t, sets: [{ disc: 500, picks: [{ bookId: 'zz', qty: 1 }] }] }), /찾지 못했/);
 });
+test('세트 줄과 낱개 줄이 나뉘고 비고 "n개 세트" 는 세트 줄에만', () => {
+  const F = ['딸기 요거트', '딸기 녹차초코', '바나나 다크초코', '바나나 녹차초코', '귤 요거트', '귤 화이트초코'];
+  // 딸기 요거트 3개 = 2개 세트에 1 · 6개 세트에 1 · 낱개 1,  나머지 맛은 6개 세트에 1씩, 귤 요거트는 2개 세트에도 1
+  const items = F.map((title, i) => ({ bookId: 'f' + i, title, price: 6000, qty: title === '딸기 요거트' ? 3 : title === '귤 요거트' ? 2 : 1 }));
+  const sets = [{ size: 2, disc: 1000, picks: [{ bookId: 'f0', qty: 1 }, { bookId: 'f4', qty: 1 }] },
+    { size: 6, disc: 3000, price: 33000, picks: F.map((_, i) => ({ bookId: 'f' + i, qty: 1 })) }];
+  const G = sum(items.map(i => i.price * i.qty));                       // 54,000
+  const t = { type: 'sale', time: new Date(2026, 10, 8, 13).toISOString(), items, sets, total: G, discount: 4000, received: G - 4000, method: '현금' };
+  const r = txRecords(t);
+  assert.deepEqual(checkTxRecords(t, r), []);
+  const rowsOf = n => r.filter(x => x.상품명 === n).map(x => `${x.수량}/${n0(x.할인)}/${x.비고}`);
+  assert.deepEqual(rowsOf('딸기 요거트'), ['1/500/2개 세트', '1/500/6개 세트', '1/0/']);
+  assert.deepEqual(rowsOf('귤 요거트'), ['1/500/2개 세트', '1/500/6개 세트']);
+  assert.deepEqual(rowsOf('바나나 다크초코'), ['1/500/6개 세트']);
+  assert.equal(sum(r.map(x => x.수량)), 9);
+  assert.equal(sum(r.map(x => n0(x.금액))), 50000);
+  assert.equal(r.filter(x => x.비고 === '2개 세트').length, 2, '2개 세트 맛 줄 = 2');
+  assert.equal(r.filter(x => x.비고 === '6개 세트').length, 6, '6개 세트 맛 줄 = 6');
+});
 test('예약을 넣고 · 입금 · 수령을 바꾸면 같은 줄이 그 자리에서 바뀐다', () => {
   const o1 = mkOrder('O1'), o2 = mkOrder('O2', { name: '이두번' });
   send([orderOp(o1, 1), orderOp(o2, 2)]);
