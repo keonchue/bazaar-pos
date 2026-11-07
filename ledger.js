@@ -179,9 +179,15 @@ export function stockRecord({ title, qty, kind, note, time }) {
 }
 
 /* ---------- 예약 → '예약' 탭 한 줄 ---------- */
-export const orderDesc = o => (o.items || []).map(i => `${clean(i.title)} ${i.qty}`).join(', ');
+/* 세트 예약: o.sets = [{ size, disc, n }], o.discount = 세트 할인 합, o.discountLabel = "2개 세트 · 3개 세트 ×2".
+   금액은 정가 합 − 할인. 주문내역 끝에 세트 표시가 붙어 시트에서도 왜 싼지 보인다. */
+const comma = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+export const orderGross = o => sum((o.items || []).map(i => (i.price || 0) * (i.qty || 0)));
+export const orderDisc = o => Math.min(Math.max(o.discount || 0, 0), orderGross(o));
+export const orderDesc = o => (o.items || []).map(i => `${clean(i.title)} ${i.qty}`).join(', ')
+  + (orderDisc(o) > 0 ? ` · ${clean(o.discountLabel) || '할인'} −${comma(orderDisc(o))}원` : '');
 export const orderQty = o => sum((o.items || []).map(i => i.qty || 0));
-export const orderAmt = o => sum((o.items || []).map(i => (i.price || 0) * (i.qty || 0)));
+export const orderAmt = o => orderGross(o) - orderDisc(o);
 export function orderRecord(o) {
   const d = new Date(o.time);
   return {

@@ -252,6 +252,20 @@ const mkOrder = (id, extra = {}) => ({ id, no: Number(id.slice(1)), time: new Da
   name: '김예약', phone: '010-1111-2222', method: '계좌이체', paid: false, handed: false, note: '',
   items: [{ title: '딸기 요거트', qty: 2, price: 3000 }, { title: '귤 요거트', qty: 1, price: 3000 }], ...extra });
 const orderOp = (o, rev) => ({ key: `order:${o.id}:${rev}`, op: 'order', id: o.id, rev, record: orderRecord(o) });
+test('세트 예약: 금액 = 정가 − 세트 할인, 주문내역에 세트 표시 · 수령 거래도 맞는다', () => {
+  const o = mkOrder('O7', { discount: 1000, discountLabel: '2개 세트', sets: [{ size: 2, disc: 1000, n: 1 }] });
+  const r = orderRecord(o);
+  assert.equal(r.금액, 8000);
+  assert.equal(r.주문내역, '딸기 요거트 2, 귤 요거트 1 · 2개 세트 −1,000원');
+  assert.equal(orderRecord(mkOrder('O8')).주문내역, '딸기 요거트 2, 귤 요거트 1');
+  assert.equal(orderRecord(mkOrder('O9', { discount: 99999 })).금액, 0, '할인이 정가를 넘지 않는다');
+  const t = { type: 'sale', time: o.time, items: o.items, total: 9000, discount: 1000, received: 8000,
+    method: '계좌이체', discountLabel: '2개 세트', note: '예약 수령 #7' };
+  const recs = txRecords(t);
+  assert.deepEqual(checkTxRecords(t, recs), []);
+  assert.equal(sum(recs.map(x => n0(x.할인))), 1000);
+  assert.ok(recs[0].비고.startsWith('2개 세트'));
+});
 test('예약을 넣고 · 입금 · 수령을 바꾸면 같은 줄이 그 자리에서 바뀐다', () => {
   const o1 = mkOrder('O1'), o2 = mkOrder('O2', { name: '이두번' });
   send([orderOp(o1, 1), orderOp(o2, 2)]);

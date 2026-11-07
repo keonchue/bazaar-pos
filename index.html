@@ -2024,11 +2024,11 @@ function renderCats(elId, cur, onPick, pool) {
   el.innerHTML = '';
   ['전체', ...CATS].forEach(c => {
     const n = c === '전체' ? pool.length : pool.filter(p => catOf(p) === c).length;
-    if (c !== '전체' && !n) return;
+    if (c === ETC && !n) return;   // 만든 분류는 상품이 아직 없어도 보인다 (기타만 비면 숨김)
     const b = document.createElement('button');
     b.type = 'button';
     b.className = c === cur ? 'on' : '';
-    b.innerHTML = `${esc(c)}<span class="n">${n}</span>`;
+    b.innerHTML = `${SET_CATS.includes(c) ? '🎁 ' : ''}${esc(c)}<span class="n">${n}</span>`;
     b.onclick = () => onPick(c);
     el.appendChild(b);
   });
@@ -2076,8 +2076,12 @@ function renderGrid() {
     grid.appendChild(el);
   });
   if (!list.length) {
-    grid.innerHTML = `<div class="cart-empty" style="grid-column:1/-1">${products.length
-      ? '찾는 상품이 없습니다.' : '등록된 상품이 없습니다.<br>‘📦 재고’ 탭에서 상품을 등록하세요.'}</div>`;
+    const msg = document.createElement('div');
+    msg.className = 'cart-empty'; msg.style.gridColumn = '1/-1';
+    msg.innerHTML = !products.length ? '등록된 상품이 없습니다.<br>‘📦 재고’ 탭에서 상품을 등록하세요.'
+      : (posCat !== '전체' && !q) ? `‘${esc(posCat)}’ 분류에 상품이 아직 없습니다.<br>‘📦 재고’ 탭에서 상품의 분류를 ‘${esc(posCat)}’ 로 바꾸거나 새로 등록하세요.`
+      : '찾는 상품이 없습니다.';
+    grid.appendChild(msg);   // 세트 카드는 그대로 둔다
   }
 }
 
@@ -2609,6 +2613,9 @@ let orderDraft = [];
 function orderModal(existing = null) {
   const editing = !!existing;
   orderDraft = editing ? (existing.items || []).map(i => { const p = productOfItem(i); return p ? { id: p.id, qty: i.qty } : null; }).filter(Boolean) : [];
+  // 세트 할인 — 판매 화면과 같은 묶음(2개 −1,000 · 3개 −2,000). 맛은 위에서 담은 낱개로 남고 몇 세트인지만 센다.
+  const orderSets = new Map(SET_DEALS.map(d => [d.size, 0]));
+  if (editing) (existing.sets || []).forEach(s => { if (orderSets.has(s.size)) orderSets.set(s.size, s.n || 0); });
   const v = k => (editing ? esc(existing[k] || '') : '');
   openModal(`<h3>${editing ? `예약 수정 · #${existing.no}` : '예약 받기'}</h3>
     <div class="field-row">
@@ -2618,6 +2625,7 @@ function orderModal(existing = null) {
     <div class="field"><label>결제수단</label><select id="oMethod">
       ${['계좌이체', '현금'].map(m => `<option${editing && existing.method === m ? ' selected' : ''}>${m}</option>`).join('')}</select></div>
     <div class="field"><label>상품 담기</label><div class="ret-list" id="oPick"></div></div>
+    <div class="field"><label>🎁 세트 할인 (${esc(SET_CATS.join(' · ') || '세트 분류 없음')} 중에서)</label><div class="ret-list" id="oSets"></div></div>
     <div class="field"><label>메모 (선택)</label><input id="oNote" placeholder="예) 2부 예배 후 수령" value="${v('note')}"></div>
     <label class="chkline"><input type="checkbox" id="oPaidChk"${editing && existing.paid ? ' checked' : ''}> 입금 완료로 표시</label>
     <div class="info-box" id="oSum"></div>
@@ -2625,11 +2633,26 @@ function orderModal(existing = null) {
   const dq = id => (orderDraft.find(d => d.id === id) || {}).qty || 0;
   const res = reservedMap();
   if (editing) (existing.items || []).forEach(i => { const p = productOfItem(i); if (p) res.set(p.id, (res.get(p.id) || 0) - i.qty); });
+  const setQty = () => sum(orderDraft.filter(d => { const p = productById(d.id); return p && SET_CATS.includes(catOf(p)); }).map(d => d.qty));
+  const setNeed = () => sum([...orderSets].map(([size, n]) => size * n));
+  const setDisc = () => sum(SET_DEALS.map(d => d.disc * orderSets.get(d.size)));
+  const setLabel = () => SET_DEALS.filter(d => orderSets.get(d.size) > 0)
+    .map(d => `${d.size}개 세트${orderSets.get(d.size) > 1 ? ' ×' + orderSets.get(d.size) : ''}`).join(' · ');
+  const setRows = [];
   const paintSum = () => {
+    // 세트에 쓸 맛이 모자라게 줄었으면 큰 세트부터 뺀다
+    let dropped = 0;
+    while (setNeed() > setQty()) {
+      const d = [...SET_DEALS].sort((a, b) => b.size - a.size).find(x => orderSets.get(x.size) > 0);
+      orderSets.set(d.size, orderSets.get(d.size) - 1); dropped++;
+    }
+    if (dropped) toast(`세트 맛 수량이 줄어 세트 ${dropped}개를 뺐습니다.`, 'bad');
+    setRows.forEach(r => r());
     const qty = sum(orderDraft.map(d => d.qty));
-    const amt = sum(orderDraft.map(d => (productById(d.id)?.price || 0) * d.qty));
+    const gross = sum(orderDraft.map(d => (productById(d.id)?.price || 0) * d.qty));
+    const disc = Math.min(setDisc(), gross), amt = gross - disc;
     const over = orderDraft.filter(d => { const p = productById(d.id); return p && d.qty > freeOf(p, res); });
-    $('oSum').innerHTML = qty ? `담은 상품 <b>${qty}개</b> · 예약 금액 <b>${won(amt)}</b>
+    $('oSum').innerHTML = qty ? `담은 상품 <b>${qty}개</b> · ${disc ? `정가 ${won(gross)} − ${esc(setLabel())} ${won(disc)} = ` : ''}예약 금액 <b>${won(amt)}</b>
       ${over.length ? `<div class="warn-text" style="color:var(--red);margin-top:4px">⚠ 남은 수량보다 많습니다: ${over.map(d => esc(productById(d.id).name)).join(', ')} — 더 만들 계획이 아니면 줄여 주세요.</div>` : ''}
       <div class="dim" style="margin-top:4px">예약을 받아도 재고는 줄지 않고, 그만큼 현장 판매에서 빠집니다.</div>` : '아래에서 ＋ 를 눌러 상품을 담으세요.';
   };
@@ -2653,6 +2676,20 @@ function orderModal(existing = null) {
     num.addEventListener('input', () => set(num.value));
     pick.appendChild(row);
   });
+  SET_DEALS.forEach(d => {
+    const row = document.createElement('div');
+    row.className = 'ret-row';
+    row.innerHTML = `<div><div class="ret-title">${d.size}개 세트</div><div class="ret-sub">세트당 −${won(d.disc)}</div></div>
+      <div class="ret-qty"><button type="button" data-a="minus">−</button><input type="text" value="0" readonly data-a="num"><button type="button" data-a="plus">＋</button></div>`;
+    const num = row.querySelector('[data-a=num]'), plus = row.querySelector('[data-a=plus]'), minus = row.querySelector('[data-a=minus]');
+    plus.onclick = () => {
+      if (setNeed() + d.size > setQty()) { toast(`세트로 묶을 맛이 모자랍니다 — 위에서 ${SET_CATS.join('·')} 을 더 담으세요.`, 'bad'); return; }
+      orderSets.set(d.size, orderSets.get(d.size) + 1); paintSum();
+    };
+    minus.onclick = () => { if (orderSets.get(d.size) > 0) { orderSets.set(d.size, orderSets.get(d.size) - 1); paintSum(); } };
+    setRows.push(() => { num.value = orderSets.get(d.size); minus.disabled = orderSets.get(d.size) <= 0; });
+    $('oSets').appendChild(row);
+  });
   paintSum();
   $('mCancel').onclick = closeModal;
   $('mSave').onclick = async () => {
@@ -2664,8 +2701,12 @@ function orderModal(existing = null) {
     const items = orderDraft.map(d => { const p = productById(d.id); return { bookId: p.id, title: p.name, category: catOf(p), qty: d.qty, price: p.price, amount: p.price * d.qty }; });
     const paid = $('oPaidChk').checked;
     const patch = { name, phone: $('oPhone').value.trim() || null, note: $('oNote').value.trim() || null,
-      method: $('oMethod').value, items, qty: sum(items.map(i => i.qty)), amount: sum(items.map(i => i.amount)),
+      method: $('oMethod').value, items, qty: sum(items.map(i => i.qty)),
+      sets: SET_DEALS.filter(d => orderSets.get(d.size) > 0).map(d => ({ size: d.size, disc: d.disc, n: orderSets.get(d.size) })),
+      discount: Math.min(setDisc(), sum(items.map(i => i.amount))), discountLabel: setLabel() || null,
       paid, paidAt: paid ? (existing?.paidAt || new Date().toISOString()) : null };
+    patch.amount = sum(items.map(i => i.amount)) - patch.discount;
+    if (setNeed() > setQty()) { toast('세트 수에 비해 세트 맛이 모자랍니다.', 'bad'); return; }
     const btn = $('mSave'); btn.disabled = true; btn.textContent = '저장 중…';
     try {
       if (editing) {
@@ -2704,7 +2745,8 @@ function pickupModal(o) {
     const method = $('pMethod').value;
     const t = { type: 'sale', time: new Date().toISOString(),
       items: (o.items || []).map(i => ({ bookId: i.bookId || null, title: i.title, category: i.category || null, qty: i.qty, price: i.price })),
-      qty: L.orderQty(o), total: amt, discount: 0, discountPct: null, received: amt, method, split: null, discountLabel: null,
+      qty: L.orderQty(o), total: L.orderGross(o), discount: L.orderDisc(o), discountPct: null, received: amt, method, split: null,
+      discountLabel: L.orderDisc(o) > 0 ? (o.discountLabel || '세트') : null,
       customer: o.name || null, phone: o.phone || null, note: `예약 수령 #${o.no}`, preorderId: o.id, by: me() };
     const chk = checkedRecords(t);
     if (chk.error) { btn.disabled = false; btn.textContent = '수령 완료'; toast('⚠ 저장하지 않았습니다 — ' + chk.error, 'bad'); return; }
