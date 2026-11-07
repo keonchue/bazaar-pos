@@ -266,6 +266,23 @@ test('세트 예약: 금액 = 정가 − 세트 할인, 주문내역에 세트 �
   assert.equal(sum(recs.map(x => n0(x.할인))), 1000);
   assert.ok(recs[0].비고.startsWith('2개 세트'));
 });
+test('6개 세트(고정가): 할인 0원이어도 비고에 세트 표시 · 손 할인과 같이 적힘 · 옛 거래 비고는 그대로', () => {
+  const items = ['딸기 요거트', '딸기 녹차초코', '바나나 다크초코', '바나나 녹차초코', '귤 요거트', '귤 화이트초코'].map(title => ({ title, qty: 1, price: 5500 }));
+  const t0 = { type: 'sale', time: new Date(2026, 10, 8, 11).toISOString(), items, total: 33000, discount: 0, received: 33000, method: '현금', setLabel: '6개 세트' };
+  const r0 = txRecords(t0);
+  assert.equal(r0.length, 6);
+  assert.ok(r0.every(r => r.비고 === '6개 세트' && r.수량 === 1));
+  const t1 = { ...t0, items: items.map(i => ({ ...i, price: 6000 })), total: 36000, discount: 3500, received: 32500, discountLabel: '봉사자' };
+  const r1 = txRecords(t1);
+  assert.deepEqual(checkTxRecords(t1, r1), []);
+  assert.equal(r1[0].비고, '6개 세트 · 봉사자');
+  assert.equal(sum(r1.map(r => n0(r.금액))), 32500);
+  const old = { ...t0, setLabel: undefined, discount: 1000, received: 32000, discountLabel: '2개 세트' };
+  assert.equal(txRecords(old)[0].비고, '2개 세트');
+  const o = mkOrder('O6', { items: items.map(i => ({ ...i, price: 5500 })), sets: [{ size: 6, n: 1, price: 33000, disc: 0 }], discount: 0, discountLabel: '6개 세트' });
+  assert.equal(orderRecord(o).주문내역.endsWith(' · 6개 세트'), true);
+  assert.equal(orderRecord(o).금액, 33000);
+});
 test('예약을 넣고 · 입금 · 수령을 바꾸면 같은 줄이 그 자리에서 바뀐다', () => {
   const o1 = mkOrder('O1'), o2 = mkOrder('O2', { name: '이두번' });
   send([orderOp(o1, 1), orderOp(o2, 2)]);

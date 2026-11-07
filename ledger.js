@@ -108,7 +108,8 @@ const clean = s => String(s ?? '').replace(/\s+/g, ' ').trim().replace(/^'+\s*/,
      received  받은 돈 (반품이면 돌려준 돈의 음수)
      method    '현금' | '계좌이체' | '분할'
      split     분할이면 { cash, transfer } (반품이면 둘 다 음수)
-     discountLabel · note · customer · phone */
+     setLabel  세트로 판 거래면 "2개 세트 · 6개 세트" — 할인이 0원이어도 비고에 남는다
+     discountLabel  할인 칸(손으로 넣은 할인)의 사유 · note · customer · phone */
 export function txRecords(t) {
   const isReturn = t.type === 'return';
   const sgn = isReturn ? -1 : 1;
@@ -143,7 +144,8 @@ export function txRecords(t) {
   }
 
   const memo = [];
-  if (!isReturn && (t.discount || 0) > 0) memo.push(clean(t.discountLabel) || '할인');
+  if (!isReturn && clean(t.setLabel)) memo.push(clean(t.setLabel));
+  if (!isReturn && (t.discount || 0) > 0 && (clean(t.discountLabel) || !clean(t.setLabel))) memo.push(clean(t.discountLabel) || '할인');
   if (t.note) memo.push(clean(t.note));
   const base = {
     날짜: serialDate(d), 시각: serialTime(d),
@@ -185,7 +187,7 @@ const comma = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 export const orderGross = o => sum((o.items || []).map(i => (i.price || 0) * (i.qty || 0)));
 export const orderDisc = o => Math.min(Math.max(o.discount || 0, 0), orderGross(o));
 export const orderDesc = o => (o.items || []).map(i => `${clean(i.title)} ${i.qty}`).join(', ')
-  + (orderDisc(o) > 0 ? ` · ${clean(o.discountLabel) || '할인'} −${comma(orderDisc(o))}원` : '');
+  + ((orderDisc(o) > 0 || (o.sets || []).length) ? ` · ${clean(o.discountLabel) || '할인'}${orderDisc(o) > 0 ? ` −${comma(orderDisc(o))}원` : ''}` : '');
 export const orderQty = o => sum((o.items || []).map(i => i.qty || 0));
 export const orderAmt = o => orderGross(o) - orderDisc(o);
 export function orderRecord(o) {
