@@ -544,24 +544,11 @@
   .book-btn .bs.zero { color: var(--red); }
   /* 대기에 잡힌 권수는 재고 바로 밑에 붙는다 — '재고가 왜 줄었지' 를 숫자 옆에서 바로 답한다 */
   .book-btn .bs em { display: block; font-style: normal; color: var(--amber); font-size: 12px; }
-  /* 세트 카드 — 누르면 맛 고르는 창이 뜬다. 할인은 빨강(색 규칙) */
-  .book-btn.set-btn { background: var(--blue-wash); border-color: var(--blue-light); }
-  .book-btn.set-btn .bp { color: var(--red); }
-  .book-btn.set-btn .bt::before { display: none; }
-  .book-btn.set-btn .bh { font-size: var(--fs-2xs); color: var(--blue-dark); font-weight: 500; }
-  /* 장바구니 안 세트 줄 */
-  .cart-set {
-    display: grid; grid-template-columns: 1fr auto 44px; gap: 6px; align-items: center;
-    padding: 10px 16px; background: var(--blue-wash); border-bottom: 1px solid var(--line-soft); font-size: var(--fs-sm);
-  }
-  .cart-set .cs-t { font-weight: 600; color: var(--blue-dark); line-height: 1.35; }
-  .cart-set .cs-t span { display: block; font-weight: 500; font-size: 13px; color: var(--muted); }
-  .cart-set .cs-d { font-weight: 600; color: var(--red); text-align: right; }
-  .cart-set .del { text-align: center; }
-  .cart-set .del button {
-    width: 30px; height: 30px; border: none; background: var(--red-wash); color: var(--red);
-    border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;
-  }
+  /* 세트 메뉴(2개·3개) — 다른 상품 카드와 같은 모양. 밑에 한 줄로 '맛 n개 골라' 만 붙는다 */
+  .book-btn .bd { font-size: var(--fs-2xs); color: var(--muted); font-weight: 500; margin-top: -4px; }
+  /* 장바구니의 세트 한 줄 — 상품 줄과 같은 칸, 제목 밑에 고른 맛 */
+  .cart-row .title .sub { display: block; font-weight: 500; font-size: 13px; color: var(--muted); }
+  .cart-row .qty .fixed { min-width: 20px; text-align: center; font-weight: 600; }
 
   /* ═══════════ 결제대기 ═══════════
      손님이 몰릴 때 담다 만 장바구니를 통째로 옆에 세워 둔다.
@@ -1309,7 +1296,7 @@
 
       <div class="summary">
         <div class="sum-row"><span class="k">총 수량</span><span id="sumQty">0개</span></div>
-        <div class="sum-row"><span class="k">합계 금액 (정가)</span><span id="sumTotal">0원</span></div>
+        <div class="sum-row"><span class="k">합계 금액</span><span id="sumTotal">0원</span></div>
         <div class="sum-row disc"><span class="k">할인</span>
           <span class="disc-input">
             <span class="disc-toggle">
@@ -1591,14 +1578,17 @@ const DEFAULT_CATS = [
 ];
 let catList = DEFAULT_CATS;
 let CATS = [...DEFAULT_CATS.map(c => c.name), ETC];
-let SET_CATS = DEFAULT_CATS.filter(c => c.set).map(c => c.name);
+let SET_CATS = DEFAULT_CATS.filter(c => c.set && c.name !== '세트').map(c => c.name);
 function applyCats(list) {
   catList = (Array.isArray(list) ? list : DEFAULT_CATS)
     .filter(c => c && typeof c.name === 'string' && c.name.trim() && c.name.trim() !== ETC)
     .map(c => ({ name: c.name.trim(), set: !!c.set }));
   CATS = [...catList.map(c => c.name), ETC];
-  SET_CATS = catList.filter(c => c.set).map(c => c.name);
+  SET_CATS = catList.filter(c => c.set && c.name !== SET_MENU_CAT).map(c => c.name);
 }
+/* '세트' 분류 — 2개·3개 세트 메뉴가 여기(와 '전체')에 보인다. 6개 세트처럼 포장해 둔 세트 상품도 여기에 둔다.
+   이 분류의 상품은 맛이 아니므로 2개·3개 세트에서 고를 수 없다. 분류 목록에 없어도 판매 화면에는 칩이 생긴다. */
+const SET_MENU_CAT = '세트';
 const catSlug = c => { const i = catList.findIndex(x => x.name === c); return i < 0 ? 'c-etc' : 'c-' + (i % 6); };
 
 /* ================= 상태 ================= */
@@ -1607,7 +1597,6 @@ let cart = [];                 // { id, qty }
 /* 세트 — 설명은 '세트' 단락 */
 const SET_DEALS = [{ size: 2, disc: 1000 }, { size: 3, disc: 2000 }];
 let cartSets = [];             // { size, disc, picks: [{ id, qty }] }
-let setsOwnDiscount = false;   // 지금 할인 칸이 세트가 채운 값인지
 let payMethod = '계좌이체';
 let session = null, sessionLoaded = false, closings = [];
 
@@ -1706,7 +1695,7 @@ function startListeners() {
   }, e => console.error('session', e));
   onSnapshot(doc(db, 'meta', 'categories'), snap => {
     applyCats(snap.exists() ? snap.data().list : null);
-    if (posCat !== '전체' && !CATS.includes(posCat)) posCat = '전체';
+    if (posCat !== '전체' && posCat !== SET_MENU_CAT && !CATS.includes(posCat)) posCat = '전체';
     renderAll();
   }, e => console.error('categories', e));
   onSnapshot(doc(db, 'meta', 'closings'), snap => {
@@ -2022,13 +2011,14 @@ let posCat = '전체';
 function renderCats(elId, cur, onPick, pool) {
   const el = $(elId);
   el.innerHTML = '';
-  ['전체', ...CATS].forEach(c => {
-    const n = c === '전체' ? pool.length : pool.filter(p => catOf(p) === c).length;
+  const chips = CATS.includes(SET_MENU_CAT) ? ['전체', ...CATS] : ['전체', SET_MENU_CAT, ...CATS];
+  chips.forEach(c => {
+    const n = (c === '전체' ? pool.length : pool.filter(p => catOf(p) === c).length) + (c === '전체' || c === SET_MENU_CAT ? SET_DEALS.length : 0);
     if (c === ETC && !n) return;   // 만든 분류는 상품이 아직 없어도 보인다 (기타만 비면 숨김)
     const b = document.createElement('button');
     b.type = 'button';
     b.className = c === cur ? 'on' : '';
-    b.innerHTML = `${SET_CATS.includes(c) ? '🎁 ' : ''}${esc(c)}<span class="n">${n}</span>`;
+    b.innerHTML = `${c === SET_MENU_CAT ? '🎁 ' : ''}${esc(c)}<span class="n">${n}</span>`;
     b.onclick = () => onPick(c);
     el.appendChild(b);
   });
@@ -2046,20 +2036,14 @@ function renderGrid() {
   const res = reservedMap();
   const list = products.filter(p => (posCat === '전체' || catOf(p) === posCat) && (!q || nameKey(p.name).includes(q)));
   grid.innerHTML = '';
-  if (!q && (posCat === '전체' || SET_CATS.includes(posCat))) {
-    const pool = setPool();
-    SET_DEALS.forEach(d => {
-      const ok = pool.reduce((n, x) => n + x.left, 0) >= d.size;
-      const el = document.createElement('button');
-      el.className = 'book-btn set-btn' + (ok ? '' : ' out');
-      el.innerHTML = `<div class="bt">🎁 ${d.size}개 세트</div>
-        <div class="bh">원하는 맛 ${d.size}개 고르기</div>
-        <div class="bp">−${won(d.disc)}</div>`;
-      el.onclick = () => (ok ? setModal(d) : toast('세트로 고를 남은 상품이 부족합니다.', 'bad'));
-      grid.appendChild(el);
-    });
-  }
-  list.forEach(p => {
+  const deals = (posCat === '전체' || posCat === SET_MENU_CAT)
+    ? SET_DEALS.filter(d => !q || nameKey(setName(d)).includes(q)) : [];
+  // 세트 메뉴는 '세트' 분류 상품(6개 세트 등) 바로 앞에, 그런 상품이 없으면 맨 뒤에 — 다른 메뉴와 한 줄에 섞인다
+  let dealsAt = list.findIndex(p => catOf(p) === SET_MENU_CAT);
+  if (dealsAt < 0) dealsAt = list.length;
+  const putDeals = () => deals.forEach(d => grid.appendChild(setCard(d)));
+  list.forEach((p, idx) => {
+    if (idx === dealsAt) putDeals();
     const inCart = (cart.find(c => c.id === p.id) || {}).qty || 0;
     const held = heldOf(p, res);
     const left = freeOf(p, res) - inCart;
@@ -2075,7 +2059,8 @@ function renderGrid() {
     el.onclick = () => addToCart(p.id);
     grid.appendChild(el);
   });
-  if (!list.length) {
+  if (dealsAt === list.length) putDeals();
+  if (!list.length && !deals.length) {
     const msg = document.createElement('div');
     msg.className = 'cart-empty'; msg.style.gridColumn = '1/-1';
     msg.innerHTML = !products.length ? '등록된 상품이 없습니다.<br>‘📦 재고’ 탭에서 상품을 등록하세요.'
@@ -2092,24 +2077,28 @@ function renderCart() {
   syncSets();
   cartSets.forEach((s, i) => {
     const row = document.createElement('div');
-    row.className = 'cart-set';
-    row.innerHTML = `<div class="cs-t">🎁 ${s.size}개 세트<span>${s.picks.map(x => esc(productById(x.id)?.name || '') + (x.qty > 1 ? ` ×${x.qty}` : '')).join(', ')}</span></div>
-      <div class="cs-d">−${won(s.disc)}</div>
+    row.className = 'cart-row';
+    row.innerHTML = `<div class="title">${setName(s)}<span class="sub">${s.picks.map(x => esc(productById(x.id)?.name || '') + (x.qty > 1 ? ` ×${x.qty}` : '')).join(', ')}</span></div>
+      <div class="qty"><span class="fixed">1</span></div>
+      <div class="amt">${won(setPrice(s))}</div>
       <div class="del"><button data-a="del" aria-label="세트 빼기">✕</button></div>`;
     row.querySelector('[data-a=del]').onclick = () => removeSet(i);
     box.appendChild(row);
   });
+  // 낱개 줄 — 세트에 들어간 만큼은 빼고 보인다 (장바구니 안에서는 맛별 합계로 들고 있다)
   cart.forEach(c => {
     const p = productById(c.id);
+    const loose = c.qty - setUsed(c.id);
+    if (loose <= 0) return;
     const row = document.createElement('div');
     row.className = 'cart-row';
     row.innerHTML = `<div class="title">${esc(p.name)}</div>
-      <div class="qty"><button data-a="dec" aria-label="빼기">−</button><span>${c.qty}</span><button data-a="inc" aria-label="더하기">＋</button></div>
-      <div class="amt">${won(p.price * c.qty)}</div>
+      <div class="qty"><button data-a="dec" aria-label="빼기">−</button><span>${loose}</span><button data-a="inc" aria-label="더하기">＋</button></div>
+      <div class="amt">${won(p.price * loose)}</div>
       <div class="del"><button data-a="del" aria-label="삭제">✕</button></div>`;
     row.querySelector('[data-a=dec]').onclick = () => changeQty(c.id, -1);
     row.querySelector('[data-a=inc]').onclick = () => changeQty(c.id, 1);
-    row.querySelector('[data-a=del]').onclick = () => { cart = cart.filter(x => x.id !== c.id); renderCart(); };
+    row.querySelector('[data-a=del]').onclick = () => { c.qty = setUsed(c.id); cart = cart.filter(x => x.qty > 0); renderCart(); };
     box.appendChild(row);
   });
   const qty = sum(cart.map(c => c.qty));
@@ -2123,7 +2112,10 @@ function renderCart() {
     if (!cart.length) { closeSheet(); cartOpenedOnce = false; }
   }
 }
-const cartTotal = () => sum(cart.map(c => { const p = productById(c.id); return p ? p.price * c.qty : 0; }));
+/* cartGross 는 정가 합, cartTotal 은 세트 값을 반영한 합 (= 장바구니 줄 금액의 합). 할인 칸은 그 위에 따로 빼는 것 */
+const cartGross = () => sum(cart.map(c => { const p = productById(c.id); return p ? p.price * c.qty : 0; }));
+const setDiscTotal = () => sum(cartSets.map(s => s.disc));
+const cartTotal = () => Math.max(cartGross() - setDiscTotal(), 0);
 let discountMode = 'amount';
 function discountPct() {
   if (discountMode !== 'percent') return 0;
@@ -2186,11 +2178,31 @@ function changeQty(id, d) {
   if (c.qty <= 0) cart = cart.filter(x => x.id !== id);
   renderCart();
 }
-/* ================= 세트 (2개 −1,000원 · 3개 −2,000원) =================
-   세트는 따로 된 상품이 아니다. 고른 맛이 장바구니에 낱개로 담기고, 세트 할인 합이
-   할인 칸에 자동으로 들어가며 사유도 "2개 세트" 처럼 채워진다.
-   → 시트에는 맛별 판매 개수가 그대로 남고, 할인은 기존처럼 품목에 나눠 빠진다 (ledger.js 그대로).
-   장바구니에서 세트에 들어간 맛을 빼서 구성이 깨지면 그 세트 할인도 같이 빠진다. */
+/* ================= 세트 메뉴 (2개 = 고른 맛 정가 − 1,000원 · 3개 = − 2,000원) =================
+   판매 화면에는 다른 메뉴와 같은 카드로 '세트' 분류에 보이고, 장바구니에도 "2개 세트 5,000원" 한 줄로 담긴다.
+   값이 고정이 아닌 건 고른 맛의 정가에서 빼기 때문이다.
+   안에서는 고른 맛이 맛별 수량(cart)에 더해지고 세트는 그 위에 얹힌 묶음(cartSets)일 뿐이라,
+   재고는 맛에서 빠지고 시트에도 맛별 줄 + 비고 "2개 세트" 로 남는다 (ledger.js 그대로).
+   할인 칸은 세트와 상관없이 따로 쓴다 — 거래의 할인 = 세트 할인 + 할인 칸. */
+const setName = d => `${d.size}개 세트`;
+const setPrice = s => Math.max(sum(s.picks.map(x => (productById(x.id)?.price || 0) * x.qty)) - s.disc, 0);
+const setUsed = id => sum(cartSets.map(s => sum(s.picks.filter(x => x.id === id).map(x => x.qty))));
+function setCard(d) {
+  const pool = setPool().filter(x => x.left > 0);
+  const can = Math.floor(sum(pool.map(x => x.left)) / d.size);
+  const prices = pool.map(x => x.p.price);
+  const lo = prices.length ? d.size * Math.min(...prices) - d.disc : 0, hi = prices.length ? d.size * Math.max(...prices) - d.disc : 0;
+  let cls = 'bs', label = `남음 ${can}`;
+  if (can <= 0) { cls += ' zero'; label = '품절'; } else if (can <= 3) cls += ' low';
+  const el = document.createElement('button');
+  el.className = 'book-btn' + (can <= 0 ? ' out' : '');
+  el.innerHTML = `<span class="${cls}">${label}</span>
+    <div class="bt">${setName(d)}</div>
+    <div class="bd">맛 ${d.size}개 골라 정가에서 −${won(d.disc)}</div>
+    <div class="bp">${!prices.length ? '-' : lo === hi ? won(lo) : `${won(lo)}~`}</div>`;
+  el.onclick = () => (can > 0 ? setModal(d) : toast('세트로 고를 남은 맛이 부족합니다.', 'bad'));
+  return el;
+}
 function setPool() {
   const res = reservedMap();
   return products.filter(p => SET_CATS.includes(catOf(p)) && p.price > 0)
@@ -2212,22 +2224,7 @@ function syncSets() {
     const idx = cartSets.map(s => s.picks.some(x => x.id === shortId[0])).lastIndexOf(true);
     cartSets.splice(idx, 1); dropped++;
   }
-  if (dropped) toast(`세트 구성이 바뀌어 세트 할인 ${dropped}개를 뺐습니다.`, 'bad');
-  const lock = cartSets.length > 0;
-  if (lock) {
-    if (discountMode !== 'amount') {
-      discountMode = 'amount';
-      $('discModeAmt').classList.add('on'); $('discModePct').classList.remove('on'); $('discUnit').textContent = '원';
-    }
-    $('discount').value = fmt(sum(cartSets.map(s => s.disc)));
-    $('discLabel').value = setLabelText();
-    setsOwnDiscount = true;
-  } else if (setsOwnDiscount) {
-    $('discount').value = ''; $('discLabel').value = '';
-    setsOwnDiscount = false;
-  }
-  ['discount', 'discLabel'].forEach(id => { $(id).readOnly = lock; });
-  ['discModeAmt', 'discModePct'].forEach(id => { $(id).disabled = lock; });
+  if (dropped) toast(`세트에 든 상품이 빠져 세트 ${dropped}개를 뺐습니다.`, 'bad');
 }
 function removeSet(i) {
   const s = cartSets[i]; if (!s) return;
@@ -2244,7 +2241,7 @@ function setModal(deal) {
   let picks = [];
   const pq = id => (picks.find(x => x.id === id) || {}).qty || 0;
   const total = () => sum(picks.map(x => x.qty));
-  openModal(`<h3>🎁 ${deal.size}개 세트 · ${won(deal.disc)} 할인</h3>
+  openModal(`<h3>🎁 ${setName(deal)} · 고른 맛 정가 − ${won(deal.disc)}</h3>
     <div class="field"><label>원하는 맛 ${deal.size}개를 고르세요 (같은 맛 여러 개도 됩니다)</label><div class="ret-list" id="sPick"></div></div>
     <div class="info-box" id="sSum"></div>
     <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn green" id="mSave" disabled>장바구니에 담기</button></div>`, true);
@@ -2252,7 +2249,7 @@ function setModal(deal) {
   const paint = () => {
     const n = total(), amt = sum(picks.map(x => productById(x.id).price * x.qty));
     $('sSum').innerHTML = n === deal.size
-      ? `${deal.size}개 골랐습니다 · 정가 ${won(amt)} − 세트 할인 ${won(deal.disc)} = <b>${won(Math.max(amt - deal.disc, 0))}</b>`
+      ? `${setName(deal)} <b>${won(Math.max(amt - deal.disc, 0))}</b> <span class="dim">(정가 ${won(amt)} − ${won(deal.disc)})</span>`
       : `${deal.size}개 중 <b>${n}개</b> 골랐습니다.`;
     $('mSave').disabled = n !== deal.size;
     rows.forEach(r => r());
@@ -2322,20 +2319,23 @@ function checkout() {
   const res = reservedMap();
   const short = lines.filter(l => l.qty > freeOf(l.p, res));
   if (short.length) { toast(`현장 판매 가능 수량을 넘었습니다: ${short.map(l => l.p.name).join(', ')}`, 'bad'); return; }
-  const total = cartTotal(), discount = currentDiscount(), payable = total - discount;
+  const gross = cartGross(), setDisc = Math.min(setDiscTotal(), gross);
+  const total = cartTotal(), manual = currentDiscount(), payable = total - manual, discount = setDisc + manual;
   if (payMethod === '분할' && !splitValid()) {
     toast(splitCash() <= 0 ? '현금으로 받은 금액을 입력하세요.' : `현금 금액은 받을 금액(${won(payable)})보다 적어야 합니다.`, 'bad');
     $('splitCash').focus(); return;
   }
-  const free = total > 0 && payable === 0;
+  const free = gross > 0 && payable === 0;
+  const manualLabel = manual > 0 ? ($('discLabel').value.trim() || (free ? '무료' : '할인')) : '';
   const t = {
     type: 'sale', time: new Date().toISOString(),
     items: lines.map(l => ({ bookId: l.p.id, title: l.p.name, category: catOf(l.p), qty: l.qty, price: l.p.price })),
-    qty: sum(lines.map(l => l.qty)), total, discount,
+    qty: sum(lines.map(l => l.qty)), total: gross, discount,
     discountPct: discountMode === 'percent' ? discountPct() : null,
     received: payable, method: payMethod,
     split: payMethod === '분할' ? { cash: splitCash(), transfer: payable - splitCash() } : null,
-    discountLabel: discount > 0 ? ($('discLabel').value.trim() || (free ? '무료' : '할인')) : null,
+    discountLabel: discount > 0 ? [setDisc > 0 ? setLabelText() : '', manualLabel].filter(Boolean).join(' · ') : null,
+    sets: cartSets.length ? cartSets.map(s => ({ size: s.size, disc: s.disc, picks: s.picks.map(x => ({ bookId: x.id, qty: x.qty })) })) : null,
     customer: $('customer').value.trim() || null, phone: null, note: null, by: me(),
   };
   const chk = checkedRecords(t);
@@ -2624,8 +2624,7 @@ function orderModal(existing = null) {
     </div>
     <div class="field"><label>결제수단</label><select id="oMethod">
       ${['계좌이체', '현금'].map(m => `<option${editing && existing.method === m ? ' selected' : ''}>${m}</option>`).join('')}</select></div>
-    <div class="field"><label>상품 담기</label><div class="ret-list" id="oPick"></div></div>
-    <div class="field"><label>🎁 세트 할인 (${esc(SET_CATS.join(' · ') || '세트 분류 없음')} 중에서)</label><div class="ret-list" id="oSets"></div></div>
+    <div class="field"><label>상품 담기 <span class="dim">(세트는 아래에서 담은 ${esc(SET_CATS.join(' · ') || '맛')} 중 몇 개를 묶는 것)</span></label><div class="ret-list" id="oPick"></div></div>
     <div class="field"><label>메모 (선택)</label><input id="oNote" placeholder="예) 2부 예배 후 수령" value="${v('note')}"></div>
     <label class="chkline"><input type="checkbox" id="oPaidChk"${editing && existing.paid ? ' checked' : ''}> 입금 완료로 표시</label>
     <div class="info-box" id="oSum"></div>
@@ -2679,16 +2678,16 @@ function orderModal(existing = null) {
   SET_DEALS.forEach(d => {
     const row = document.createElement('div');
     row.className = 'ret-row';
-    row.innerHTML = `<div><div class="ret-title">${d.size}개 세트</div><div class="ret-sub">세트당 −${won(d.disc)}</div></div>
+    row.innerHTML = `<div><div class="ret-title">${setName(d)}</div><div class="ret-sub">맛 ${d.size}개 묶어 정가에서 −${won(d.disc)}</div></div>
       <div class="ret-qty"><button type="button" data-a="minus">−</button><input type="text" value="0" readonly data-a="num"><button type="button" data-a="plus">＋</button></div>`;
     const num = row.querySelector('[data-a=num]'), plus = row.querySelector('[data-a=plus]'), minus = row.querySelector('[data-a=minus]');
     plus.onclick = () => {
-      if (setNeed() + d.size > setQty()) { toast(`세트로 묶을 맛이 모자랍니다 — 위에서 ${SET_CATS.join('·')} 을 더 담으세요.`, 'bad'); return; }
+      if (setNeed() + d.size > setQty()) { toast(`세트로 묶을 맛이 모자랍니다 — 아래에서 ${SET_CATS.join('·')} 을 더 담으세요.`, 'bad'); return; }
       orderSets.set(d.size, orderSets.get(d.size) + 1); paintSum();
     };
     minus.onclick = () => { if (orderSets.get(d.size) > 0) { orderSets.set(d.size, orderSets.get(d.size) - 1); paintSum(); } };
     setRows.push(() => { num.value = orderSets.get(d.size); minus.disabled = orderSets.get(d.size) <= 0; });
-    $('oSets').appendChild(row);
+    pick.insertBefore(row, pick.firstChild && pick.children[SET_DEALS.indexOf(d)] || null);
   });
   paintSum();
   $('mCancel').onclick = closeModal;
@@ -2825,7 +2824,8 @@ function categoryModal() {
   const countOf = name => products.filter(p => catOf(p) === name).length;
   openModal(`<h3>✏️ 분류 수정</h3>
     <p class="desc">이름을 고치면 그 분류의 상품이 같이 옮겨 갑니다. 지운 분류의 상품은 '기타' 로 갑니다.<br>
-      <b>세트</b> 에 체크한 분류의 상품만 2개·3개 세트에서 고를 수 있습니다. 시트에는 분류 칸이 없어 시트는 바뀌지 않습니다.</p>
+      <b>세트</b> 에 체크한 분류의 상품만 2개·3개 세트에서 고를 수 있습니다.
+      '<b>세트</b>' 라는 이름의 분류에는 2개·3개 세트 메뉴가 함께 보입니다 — 6개 세트처럼 포장한 세트 상품을 여기에 두세요 (맛으로는 안 쓰입니다). 시트에는 분류 칸이 없어 시트는 바뀌지 않습니다.</p>
     <div class="ret-list" id="cRows"></div>
     <div class="field-row" style="margin-top:12px;align-items:flex-end">
       <div class="field" style="flex:1"><label>새 분류</label><input id="cNew" type="text" placeholder="예) 블루베리" autocomplete="off"></div>
