@@ -1774,6 +1774,7 @@ function stockMove(batch, { product, kind, qty, note, before, after, reason }) {
 let sheetCfg = null;
 let qRemote = new Map();
 let qSeen = false, qStarted = false, qSeq = 0, qEpoch = 0;
+let qLocal = 0;                // 이 기기에서 저장했지만 서버가 아직 안 받은 큐 칸 수 (보내지는 않고 세기만 한다)
 const FLUSH_OWNER = Math.random().toString(36).slice(2, 10);
 const qDocId = key => String(key).replace(/\//g, '_');
 const sheetQueue = () => [...qRemote.values()].sort((a, b) => (a.at || 0) - (b.at || 0));
@@ -1806,7 +1807,9 @@ function startSheetQueue() {
   onSnapshot(qCol, { includeMetadataChanges: true }, snap => {
     const m = new Map();
     // 아직 서버가 받지 않은 칸(이 기기에만 있는 것)은 보내지 않는다 — 판매 저장이 거절되면 같이 사라질 칸이다
-    snap.docs.forEach(d => { if (d.metadata.hasPendingWrites) return; const x = d.data(); if (x && x.key) m.set(x.key, x); });
+    let local = 0;
+    snap.docs.forEach(d => { if (d.metadata.hasPendingWrites) { local++; return; } const x = d.data(); if (x && x.key) m.set(x.key, x); });
+    qLocal = local;
     qRemote = m;
     qSeen = true;
     qEpoch++;
@@ -1930,7 +1933,8 @@ function buildExpected() {
 async function verifySheet({ quiet = false } = {}) {
   if (verifying || !db || !sheetCfg || !sheetCfg.url || !navigator.onLine) return sheetCheck;
   if (!qSeen) { scheduleVerify(5000); return sheetCheck; }
-  const pending = sheetQueue().length;
+  // 서버가 아직 안 받은 판매 · 큐가 있으면 시트가 뒤처진 게 당연하다 — 대조하면 '빠짐' 으로 잘못 나온다
+  const pending = sheetQueue().length + qLocal + syncMeta.tx.pending + syncMeta.products.pending;
   if (pending) {
     sheetCheck = { waiting: `못 보낸 기록 ${pending}건을 보낸 뒤 대조합니다` };
     renderSheetBadge(); flushSheet();
@@ -1941,7 +1945,7 @@ async function verifySheet({ quiet = false } = {}) {
   try {
     const epoch = qEpoch;
     const out = await sheetPost({ action: 'verify' }, 60000);
-    if (epoch !== qEpoch || sheetQueue().length) { scheduleVerify(8000); return sheetCheck; }
+    if (epoch !== qEpoch || sheetQueue().length || qLocal || syncMeta.tx.pending) { scheduleVerify(8000); return sheetCheck; }
     const exp = buildExpected();
     const ledger = L.compareLedger(exp.ledger, out.ledger || []);
     const orders = L.compareOrders(exp.orders, out.orders || []);
@@ -1988,7 +1992,7 @@ const STUCK_MS = 2 * 60 * 1000;
 function sheetIssues() {
   const q = sheetQueue();
   return {
-    pending: q.length,
+    pending: q.length + qLocal,
     stuck: q.filter(x => (x.at || 0) < Date.now() - STUCK_MS).length,
     rejected: q.filter(x => x.err),
     mismatch: !!(sheetCheck && sheetCheck.ledger && !sheetCheck.ok),
@@ -2503,7 +2507,7 @@ function returnModal(t) {
     info();
   };
   const info = () => {
-    const n = sum(picks().map(p => p.q));
+    const n = sum(picks().map(p => p.set != null ? p.q * sum((t.sets[p.set].picks || []).map(x => x.qty)) : p.q));   // 세트는 든 개수만큼
     $('mRetInfo').innerHTML = `반품 <b>${n}개</b> · 환불 <b>${won(refundTotal())}</b><br>` +
       ($('mRestock').checked ? '재고가 그만큼 다시 늘어납니다.' : '재고는 그대로 두고, 시트에 폐기(재고조정) 줄을 같이 남깁니다.');
   };
