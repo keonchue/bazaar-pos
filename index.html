@@ -544,6 +544,24 @@
   .book-btn .bs.zero { color: var(--red); }
   /* 대기에 잡힌 권수는 재고 바로 밑에 붙는다 — '재고가 왜 줄었지' 를 숫자 옆에서 바로 답한다 */
   .book-btn .bs em { display: block; font-style: normal; color: var(--amber); font-size: 12px; }
+  /* 세트 카드 — 누르면 맛 고르는 창이 뜬다. 할인은 빨강(색 규칙) */
+  .book-btn.set-btn { background: var(--blue-wash); border-color: var(--blue-light); }
+  .book-btn.set-btn .bp { color: var(--red); }
+  .book-btn.set-btn .bt::before { display: none; }
+  .book-btn.set-btn .bh { font-size: var(--fs-2xs); color: var(--blue-dark); font-weight: 500; }
+  /* 장바구니 안 세트 줄 */
+  .cart-set {
+    display: grid; grid-template-columns: 1fr auto 44px; gap: 6px; align-items: center;
+    padding: 10px 16px; background: var(--blue-wash); border-bottom: 1px solid var(--line-soft); font-size: var(--fs-sm);
+  }
+  .cart-set .cs-t { font-weight: 600; color: var(--blue-dark); line-height: 1.35; }
+  .cart-set .cs-t span { display: block; font-weight: 500; font-size: 13px; color: var(--muted); }
+  .cart-set .cs-d { font-weight: 600; color: var(--red); text-align: right; }
+  .cart-set .del { text-align: center; }
+  .cart-set .del button {
+    width: 30px; height: 30px; border: none; background: var(--red-wash); color: var(--red);
+    border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;
+  }
 
   /* ═══════════ 결제대기 ═══════════
      손님이 몰릴 때 담다 만 장바구니를 통째로 옆에 세워 둔다.
@@ -1151,11 +1169,27 @@
   }
 
   /* ═══════════ 바자회 POS 에서 더한 것 ═══════════ */
-  .cat-badge.c-straw  { color: var(--red); }
-  .cat-badge.c-banana { color: var(--amber); }
-  .cat-badge.c-tang   { color: #b8560c; }
-  .cat-badge.c-drink  { color: var(--green-dark); }
-  .cat-badge.c-etc    { color: var(--muted); }
+  /* 분류 색은 분류 목록 순서대로 돌아가며 쓴다 (분류를 앱에서 바꿀 수 있어서 이름에 묶지 않는다) */
+  .cat-badge.c-0 { color: var(--red); }
+  .cat-badge.c-1 { color: var(--amber); }
+  .cat-badge.c-2 { color: #b8560c; }
+  .cat-badge.c-3 { color: var(--green-dark); }
+  .cat-badge.c-4 { color: var(--blue); }
+  .cat-badge.c-5 { color: #7a3fb0; }
+  .cat-badge.c-etc { color: var(--muted); }
+  .cats button.cat-edit { border-style: dashed; color: var(--blue); background: transparent; }
+  .cat-ed-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 9px 12px; border-bottom: 1px solid var(--line-soft); }
+  .cat-ed-row:last-child { border-bottom: none; }
+  .cat-ed-row input[type=text] {
+    width: 100%; min-width: 0; padding: 9px 11px; border: 2px solid var(--line); border-radius: var(--r-sm);
+    font-size: 16px; background: #fff; color: inherit;
+  }
+  .cat-ed-row input[type=text]:focus { outline: none; border-color: var(--blue); }
+  .cat-ed-row .cat-ed-sub { grid-column: 1 / -1; font-size: 13px; color: var(--muted); margin-top: -3px; }
+  .cat-ed-row label { display: flex; align-items: center; gap: 5px; font-size: var(--fs-xs); white-space: nowrap; }
+  .cat-ed-row .del-btn { width: 34px; height: 34px; border: none; background: var(--red-wash); color: var(--red); border-radius: 8px; cursor: pointer; font-weight: 600; }
+  .cat-ed-row.gone input[type=text] { text-decoration: line-through; opacity: .5; }
+  .cat-ed-row.gone .del-btn { background: var(--gray); color: var(--text); }
 
   .book-btn .bh { font-size: var(--fs-2xs); color: var(--amber); font-weight: 600; margin-top: 2px; }
   .book-btn .bp.noprice { color: var(--red); font-size: var(--fs-xs); }
@@ -1548,12 +1582,32 @@ const SEED_PRODUCTS = [
   { id: 'p5', name: '귤 요거트',       category: '귤',     stock: 11 },
   { id: 'p6', name: '귤 화이트초코',   category: '귤',     stock: 12 },
 ];
-const CATS = ['딸기', '바나나', '귤', '음료', '기타'];
-const CAT_SLUG = { 딸기: 'c-straw', 바나나: 'c-banana', 귤: 'c-tang', 음료: 'c-drink', 기타: 'c-etc' };
+/* 분류는 앱에서 고친다 (판매 화면 분류 줄의 ✏️). Firestore meta/categories 에 있고 모든 기기가 같이 본다.
+   set: 세트(2개·3개)로 고를 수 있는 분류인지. '기타' 는 늘 맨 끝에 있고 지우거나 이름을 바꿀 수 없다
+   (분류가 지워진 상품이 가는 곳). 시트에는 분류 칸이 없어서 분류를 바꿔도 시트는 그대로다. */
+const ETC = '기타';
+const DEFAULT_CATS = [
+  { name: '딸기', set: true }, { name: '바나나', set: true }, { name: '귤', set: true }, { name: '음료', set: false },
+];
+let catList = DEFAULT_CATS;
+let CATS = [...DEFAULT_CATS.map(c => c.name), ETC];
+let SET_CATS = DEFAULT_CATS.filter(c => c.set).map(c => c.name);
+function applyCats(list) {
+  catList = (Array.isArray(list) ? list : DEFAULT_CATS)
+    .filter(c => c && typeof c.name === 'string' && c.name.trim() && c.name.trim() !== ETC)
+    .map(c => ({ name: c.name.trim(), set: !!c.set }));
+  CATS = [...catList.map(c => c.name), ETC];
+  SET_CATS = catList.filter(c => c.set).map(c => c.name);
+}
+const catSlug = c => { const i = catList.findIndex(x => x.name === c); return i < 0 ? 'c-etc' : 'c-' + (i % 6); };
 
 /* ================= 상태 ================= */
 let products = [], transactions = [], preorders = [], stockLogs = [];
 let cart = [];                 // { id, qty }
+/* 세트 — 설명은 '세트' 단락 */
+const SET_DEALS = [{ size: 2, disc: 1000 }, { size: 3, disc: 2000 }];
+let cartSets = [];             // { size, disc, picks: [{ id, qty }] }
+let setsOwnDiscount = false;   // 지금 할인 칸이 세트가 채운 값인지
 let payMethod = '계좌이체';
 let session = null, sessionLoaded = false, closings = [];
 
@@ -1564,8 +1618,8 @@ const digits = v => String(v ?? '').replace(/[^\d]/g, '');
 const sum = a => a.reduce((s, x) => s + x, 0);
 const nameKey = s => String(s ?? '').trim().toLowerCase().replace(/\s+/g, '');
 const productById = id => products.find(p => p.id === id);
-const catOf = p => CATS.includes(p?.category) ? p.category : '기타';
-const catBadge = p => `<span class="cat-badge ${CAT_SLUG[catOf(p)]}">${catOf(p)}</span>`;
+const catOf = p => CATS.includes(p?.category) ? p.category : ETC;
+const catBadge = p => `<span class="cat-badge ${catSlug(catOf(p))}">${esc(catOf(p))}</span>`;
 const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'ko');
 const p2 = n => String(n).padStart(2, '0');
 const ymd = d => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
@@ -1650,6 +1704,11 @@ function startListeners() {
     sessionLoaded = true;
     renderBiz(); renderAll(); tickClock();
   }, e => console.error('session', e));
+  onSnapshot(doc(db, 'meta', 'categories'), snap => {
+    applyCats(snap.exists() ? snap.data().list : null);
+    if (posCat !== '전체' && !CATS.includes(posCat)) posCat = '전체';
+    renderAll();
+  }, e => console.error('categories', e));
   onSnapshot(doc(db, 'meta', 'closings'), snap => {
     closings = (snap.exists() && snap.data().list) || [];
     renderBiz();
@@ -1969,10 +2028,16 @@ function renderCats(elId, cur, onPick, pool) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = c === cur ? 'on' : '';
-    b.innerHTML = `${c}<span class="n">${n}</span>`;
+    b.innerHTML = `${esc(c)}<span class="n">${n}</span>`;
     b.onclick = () => onPick(c);
     el.appendChild(b);
   });
+  if (elId === 'posCats') {
+    const e = document.createElement('button');
+    e.type = 'button'; e.className = 'cat-edit'; e.textContent = '✏️ 분류 수정';
+    e.onclick = categoryModal;
+    el.appendChild(e);
+  }
 }
 function renderGrid() {
   const grid = $('productGrid');
@@ -1981,6 +2046,19 @@ function renderGrid() {
   const res = reservedMap();
   const list = products.filter(p => (posCat === '전체' || catOf(p) === posCat) && (!q || nameKey(p.name).includes(q)));
   grid.innerHTML = '';
+  if (!q && (posCat === '전체' || SET_CATS.includes(posCat))) {
+    const pool = setPool();
+    SET_DEALS.forEach(d => {
+      const ok = pool.reduce((n, x) => n + x.left, 0) >= d.size;
+      const el = document.createElement('button');
+      el.className = 'book-btn set-btn' + (ok ? '' : ' out');
+      el.innerHTML = `<div class="bt">🎁 ${d.size}개 세트</div>
+        <div class="bh">원하는 맛 ${d.size}개 고르기</div>
+        <div class="bp">−${won(d.disc)}</div>`;
+      el.onclick = () => (ok ? setModal(d) : toast('세트로 고를 남은 상품이 부족합니다.', 'bad'));
+      grid.appendChild(el);
+    });
+  }
   list.forEach(p => {
     const inCart = (cart.find(c => c.id === p.id) || {}).qty || 0;
     const held = heldOf(p, res);
@@ -2007,6 +2085,16 @@ function renderCart() {
   const box = $('cartItems');
   box.innerHTML = cart.length ? '' : '<div class="cart-empty">판매할 상품을 누르면<br>여기에 담깁니다.</div>';
   cart = cart.filter(c => productById(c.id));
+  syncSets();
+  cartSets.forEach((s, i) => {
+    const row = document.createElement('div');
+    row.className = 'cart-set';
+    row.innerHTML = `<div class="cs-t">🎁 ${s.size}개 세트<span>${s.picks.map(x => esc(productById(x.id)?.name || '') + (x.qty > 1 ? ` ×${x.qty}` : '')).join(', ')}</span></div>
+      <div class="cs-d">−${won(s.disc)}</div>
+      <div class="del"><button data-a="del" aria-label="세트 빼기">✕</button></div>`;
+    row.querySelector('[data-a=del]').onclick = () => removeSet(i);
+    box.appendChild(row);
+  });
   cart.forEach(c => {
     const p = productById(c.id);
     const row = document.createElement('div');
@@ -2094,7 +2182,118 @@ function changeQty(id, d) {
   if (c.qty <= 0) cart = cart.filter(x => x.id !== id);
   renderCart();
 }
+/* ================= 세트 (2개 −1,000원 · 3개 −2,000원) =================
+   세트는 따로 된 상품이 아니다. 고른 맛이 장바구니에 낱개로 담기고, 세트 할인 합이
+   할인 칸에 자동으로 들어가며 사유도 "2개 세트" 처럼 채워진다.
+   → 시트에는 맛별 판매 개수가 그대로 남고, 할인은 기존처럼 품목에 나눠 빠진다 (ledger.js 그대로).
+   장바구니에서 세트에 들어간 맛을 빼서 구성이 깨지면 그 세트 할인도 같이 빠진다. */
+function setPool() {
+  const res = reservedMap();
+  return products.filter(p => SET_CATS.includes(catOf(p)) && p.price > 0)
+    .map(p => ({ p, left: freeOf(p, res) - ((cart.find(c => c.id === p.id) || {}).qty || 0) }));
+}
+function setLabelText() {
+  const n = {};
+  cartSets.forEach(s => { n[s.size] = (n[s.size] || 0) + 1; });
+  return Object.keys(n).sort().map(k => `${k}개 세트${n[k] > 1 ? ' ×' + n[k] : ''}`).join(' · ');
+}
+function syncSets() {
+  // 장바구니에 세트 구성이 다 들어 있는지 — 모자라면 뒤에 담은 세트부터 뺀다
+  let dropped = 0;
+  for (;;) {
+    const need = new Map();
+    cartSets.forEach(s => s.picks.forEach(x => need.set(x.id, (need.get(x.id) || 0) + x.qty)));
+    const shortId = [...need].find(([id, q]) => q > ((cart.find(c => c.id === id) || {}).qty || 0));
+    if (!shortId) break;
+    const idx = cartSets.map(s => s.picks.some(x => x.id === shortId[0])).lastIndexOf(true);
+    cartSets.splice(idx, 1); dropped++;
+  }
+  if (dropped) toast(`세트 구성이 바뀌어 세트 할인 ${dropped}개를 뺐습니다.`, 'bad');
+  const lock = cartSets.length > 0;
+  if (lock) {
+    if (discountMode !== 'amount') {
+      discountMode = 'amount';
+      $('discModeAmt').classList.add('on'); $('discModePct').classList.remove('on'); $('discUnit').textContent = '원';
+    }
+    $('discount').value = fmt(sum(cartSets.map(s => s.disc)));
+    $('discLabel').value = setLabelText();
+    setsOwnDiscount = true;
+  } else if (setsOwnDiscount) {
+    $('discount').value = ''; $('discLabel').value = '';
+    setsOwnDiscount = false;
+  }
+  ['discount', 'discLabel'].forEach(id => { $(id).readOnly = lock; });
+  ['discModeAmt', 'discModePct'].forEach(id => { $(id).disabled = lock; });
+}
+function removeSet(i) {
+  const s = cartSets[i]; if (!s) return;
+  cartSets.splice(i, 1);
+  s.picks.forEach(x => {
+    const c = cart.find(y => y.id === x.id);
+    if (c) c.qty -= x.qty;
+  });
+  cart = cart.filter(c => c.qty > 0);
+  renderCart();
+}
+function setModal(deal) {
+  const pool = setPool();
+  let picks = [];
+  const pq = id => (picks.find(x => x.id === id) || {}).qty || 0;
+  const total = () => sum(picks.map(x => x.qty));
+  openModal(`<h3>🎁 ${deal.size}개 세트 · ${won(deal.disc)} 할인</h3>
+    <div class="field"><label>원하는 맛 ${deal.size}개를 고르세요 (같은 맛 여러 개도 됩니다)</label><div class="ret-list" id="sPick"></div></div>
+    <div class="info-box" id="sSum"></div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn green" id="mSave" disabled>장바구니에 담기</button></div>`, true);
+  const rows = [];
+  const paint = () => {
+    const n = total(), amt = sum(picks.map(x => productById(x.id).price * x.qty));
+    $('sSum').innerHTML = n === deal.size
+      ? `${deal.size}개 골랐습니다 · 정가 ${won(amt)} − 세트 할인 ${won(deal.disc)} = <b>${won(Math.max(amt - deal.disc, 0))}</b>`
+      : `${deal.size}개 중 <b>${n}개</b> 골랐습니다.`;
+    $('mSave').disabled = n !== deal.size;
+    rows.forEach(r => r());
+  };
+  pool.forEach(({ p, left }) => {
+    const row = document.createElement('div');
+    row.className = 'ret-row';
+    row.innerHTML = `<div><div class="ret-title">${esc(p.name)}</div><div class="ret-sub">${won(p.price)} · 남음 ${Math.max(left, 0)}</div></div>
+      <div class="ret-qty"><button type="button" data-a="minus">−</button><input type="text" value="0" readonly data-a="num"><button type="button" data-a="plus">＋</button></div>`;
+    const num = row.querySelector('[data-a=num]'), plus = row.querySelector('[data-a=plus]'), minus = row.querySelector('[data-a=minus]');
+    const setQ = q => {
+      picks = picks.filter(x => x.id !== p.id);
+      if (q > 0) picks.push({ id: p.id, qty: q });
+      paint();
+    };
+    plus.onclick = () => { if (total() < deal.size && pq(p.id) < left) setQ(pq(p.id) + 1); };
+    minus.onclick = () => { if (pq(p.id) > 0) setQ(pq(p.id) - 1); };
+    rows.push(() => {
+      num.value = pq(p.id);
+      plus.disabled = total() >= deal.size || pq(p.id) >= left;
+      minus.disabled = pq(p.id) <= 0;
+    });
+    $('sPick').appendChild(row);
+  });
+  paint();
+  $('mCancel').onclick = closeModal;
+  $('mSave').onclick = () => {
+    if (total() !== deal.size) return;
+    // 창을 연 사이 다른 기기에서 팔렸을 수도 있으니 담기 직전에 다시 본다
+    const now = new Map(setPool().map(x => [x.p.id, x.left]));
+    const short = picks.filter(x => x.qty > (now.get(x.id) || 0));
+    if (short.length) { toast(`남은 수량이 부족합니다: ${short.map(x => productById(x.id)?.name).join(', ')}`, 'bad'); return; }
+    picks.forEach(x => {
+      const c = cart.find(y => y.id === x.id);
+      if (c) c.qty += x.qty; else cart.push({ id: x.id, qty: x.qty });
+    });
+    cartSets.push({ size: deal.size, disc: deal.disc, picks: picks.map(x => ({ ...x })) });
+    closeModal();
+    beep();
+    renderCart();
+  };
+}
+
 function clearCart() {
+  cartSets = [];
   cart = [];
   ['customer', 'discount', 'discLabel', 'splitCash'].forEach(id => { $(id).value = ''; });
   if (payMethod === '분할') selectPayMethod('계좌이체');
@@ -2577,7 +2776,93 @@ function renderInventory() {
   });
   if (!products.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">등록된 상품이 없습니다.</td></tr>';
 }
-const catSelect = cur => `<select id="mCat">${CATS.map(c => `<option${c === cur ? ' selected' : ''}>${c}</option>`).join('')}</select>`;
+/* 분류 수정 — 이름 바꾸기 · 추가 · 삭제 · 세트 가능 여부. 저장하면 한 번에(batch) 반영:
+   이름이 바뀐 분류의 상품은 새 이름으로, 지운 분류의 상품은 '기타' 로 옮긴다. */
+function categoryModal() {
+  const rows = catList.map(c => ({ orig: c.name, name: c.name, set: c.set, gone: false }));
+  const countOf = name => products.filter(p => catOf(p) === name).length;
+  openModal(`<h3>✏️ 분류 수정</h3>
+    <p class="desc">이름을 고치면 그 분류의 상품이 같이 옮겨 갑니다. 지운 분류의 상품은 '기타' 로 갑니다.<br>
+      <b>세트</b> 에 체크한 분류의 상품만 2개·3개 세트에서 고를 수 있습니다. 시트에는 분류 칸이 없어 시트는 바뀌지 않습니다.</p>
+    <div class="ret-list" id="cRows"></div>
+    <div class="field-row" style="margin-top:12px;align-items:flex-end">
+      <div class="field" style="flex:1"><label>새 분류</label><input id="cNew" type="text" placeholder="예) 블루베리" autocomplete="off"></div>
+      <button class="btn ghost" id="cAdd" type="button" style="margin-bottom:2px">＋ 추가</button>
+    </div>
+    <div class="info-box" id="cInfo"></div>
+    <div class="modal-actions"><button class="btn ghost" id="mCancel">취소</button><button class="btn primary" id="mSave">저장</button></div>`, true);
+  const problem = () => {
+    const live = rows.filter(r => !r.gone).map(r => r.name.trim());
+    if (live.some(n => !n)) return '빈 이름이 있습니다.';
+    if (live.some(n => n === ETC || n === '전체')) return `'${ETC}' · '전체' 는 분류 이름으로 쓸 수 없습니다.`;
+    if (new Set(live).size !== live.length) return '같은 이름이 두 번 있습니다.';
+    return '';
+  };
+  const info = () => {
+    const err = problem();
+    const moved = sum(rows.filter(r => r.gone && r.orig).map(r => countOf(r.orig)));
+    $('cInfo').innerHTML = err ? `<span style="color:var(--red)">⚠ ${err}</span>`
+      : (moved ? `저장하면 상품 <b>${moved}개</b>가 '기타' 로 옮겨집니다.` : '이 순서대로 판매 화면에 보입니다.');
+    $('mSave').disabled = !!err;
+  };
+  const paint = () => {
+    const box = $('cRows'); box.innerHTML = '';
+    rows.forEach((r, i) => {
+      const n = r.orig ? countOf(r.orig) : 0;
+      const renamed = !r.gone && r.orig && r.name.trim() !== r.orig;
+      const row = document.createElement('div');
+      row.className = 'cat-ed-row' + (r.gone ? ' gone' : '');
+      row.innerHTML = `<input type="text" value="${esc(r.name)}" ${r.gone ? 'disabled' : ''} autocomplete="off">
+        <label><input type="checkbox" ${r.set ? 'checked' : ''} ${r.gone ? 'disabled' : ''}> 세트</label>
+        <button type="button" class="del-btn" aria-label="${r.gone ? '되살리기' : '지우기'}">${r.gone ? '↩' : '🗑'}</button>
+        <div class="cat-ed-sub">${r.orig ? `상품 ${n}개` : '새 분류'}${r.gone && n ? ` → '${ETC}' 로 옮겨짐` : ''}${renamed ? ` · '${esc(r.orig)}' 에서 이름 바뀜` : ''}</div>`;
+      const [txt, chk] = row.querySelectorAll('input');
+      txt.addEventListener('input', () => { r.name = txt.value; info(); });
+      txt.addEventListener('change', paint);
+      chk.onchange = () => { r.set = chk.checked; };
+      row.querySelector('.del-btn').onclick = () => {
+        if (!r.orig) rows.splice(i, 1); else r.gone = !r.gone;
+        paint();
+      };
+      box.appendChild(row);
+    });
+    const etc = document.createElement('div');
+    etc.className = 'cat-ed-row';
+    etc.innerHTML = `<div style="padding:6px 2px;color:var(--muted)">${ETC} <span style="font-size:13px">(고정 · 상품 ${countOf(ETC)}개)</span></div>`;
+    box.appendChild(etc);
+    info();
+  };
+  const add = () => {
+    const v = $('cNew').value.trim(); if (!v) return;
+    rows.push({ orig: null, name: v, set: false, gone: false });
+    $('cNew').value = ''; paint();
+  };
+  $('cAdd').onclick = add;
+  $('cNew').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  paint();
+  $('mCancel').onclick = closeModal;
+  $('mSave').onclick = async () => {
+    if (problem()) return;
+    const list = rows.filter(r => !r.gone).map(r => ({ name: r.name.trim(), set: r.set }));
+    const moveTo = new Map();
+    rows.filter(r => r.orig).forEach(r => {
+      if (r.gone) moveTo.set(r.orig, ETC);
+      else if (r.name.trim() !== r.orig) moveTo.set(r.orig, r.name.trim());
+    });
+    const btn = $('mSave'); btn.disabled = true; btn.textContent = '저장 중…';
+    try {
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'meta', 'categories'), { list, updatedAt: new Date().toISOString(), by: me() });
+      products.forEach(p => { const to = moveTo.get(catOf(p)); if (to) batch.update(doc(productsCol, p.id), { category: to }); });
+      await batch.commit();
+      closeModal(); toast('분류를 저장했습니다.', 'good');
+    } catch (e) {
+      console.error(e); toast('분류 저장 실패 · 연결 확인', 'bad');
+      btn.disabled = false; btn.textContent = '저장';
+    }
+  };
+}
+const catSelect = cur => `<select id="mCat">${CATS.map(c => `<option${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>`;
 const nameTaken = (name, exceptId) => products.some(p => p.id !== exceptId && nameKey(p.name) === nameKey(name));
 
 function addProductModal() {
@@ -3095,7 +3380,7 @@ function resetAll() {
       try {
         if (sheetCfg && sheetCfg.url) await sheetPost({ action: 'reset' });
         for (const col of [qCol, txCol, ordersCol, logsCol, productsCol]) await wipe(col);
-        for (const id of ['init', 'session', 'closings', 'counters', 'sheetFlush']) await deleteDoc(doc(db, 'meta', id));
+        for (const id of ['init', 'session', 'closings', 'counters', 'sheetFlush', 'categories']) await deleteDoc(doc(db, 'meta', id));
         qRemote = new Map(); sheetCheck = null; cart = [];
         await seedIfNeeded();
         closeModal(); toast('초기화했습니다.', 'good');
